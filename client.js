@@ -437,6 +437,7 @@ window.__ModuleLoader__.load({
 
     function clearMemberships(sessionId) {
       const state = dataStore.getSnapshot()
+      if (state.ungroupedCollapsed) void setUngroupedCollapsed(false)
       const memberships = { ...state.memberships }
       delete memberships[sessionId]
       const pins = { ...state.pins }
