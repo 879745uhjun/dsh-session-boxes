@@ -102,6 +102,8 @@ window.__ModuleLoader__.load({
       'pin.toggle': '在箱子内置顶',
       'pin.untoggle': '取消箱子内置顶',
       'pin.hint': '点右侧图钉把会话固定到箱子顶部；不会影响原生置顶。',
+      'pin.row': '箱内置顶：{name}',
+      'menu.unpinBox': '取消在「{name}」箱内置顶',
       'error.save': '保存失败，请重试',
       'error.load': '分组数据暂时不可用',
       'color.blue': '蓝色',
@@ -166,6 +168,8 @@ window.__ModuleLoader__.load({
       'pin.toggle': 'Pin inside this box',
       'pin.untoggle': 'Unpin inside this box',
       'pin.hint': 'Use the pin on the right to keep a session at the top of this box; the native global pin is untouched.',
+      'pin.row': 'Pinned in {name}',
+      'menu.unpinBox': 'Unpin inside “{name}”',
       'error.save': 'Could not save. Try again.',
       'error.load': 'Box data is unavailable',
       'color.blue': 'Blue',
@@ -2255,9 +2259,26 @@ window.__ModuleLoader__.load({
       return null
     }
 
+    function BoxPinBadge({ sessionId, t }) {
+      const state = useBoxes()
+      const box = state.boxes.find((entry) => (state.memberships[sessionId] ?? []).includes(entry.id))
+      if (box === undefined) return null
+      if (!((state.pins ?? {})[box.id] ?? []).includes(sessionId)) return null
+      const label = t('pin.row', { name: box.name })
+      return h('span', {
+        className: 'dsb-rowPin',
+        style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue },
+        title: label,
+        'aria-label': label,
+      }, h(PinGlyph))
+    }
+
     function BoxMenuItem({ sessionId, displayTitle, useMenuOpenState, t }) {
+      const state = useBoxes()
       const useMenu = typeof useMenuOpenState === 'function' ? useMenuOpenState : () => [false, () => {}]
       const [, setMenuOpen] = useMenu()
+      const box = state.boxes.find((entry) => (state.memberships[sessionId] ?? []).includes(entry.id))
+      const pinned = box !== undefined && ((state.pins ?? {})[box.id] ?? []).includes(sessionId)
       const open = () => {
         setMenuOpen(false)
         openDialog({
@@ -2266,15 +2287,42 @@ window.__ModuleLoader__.load({
           title: typeof displayTitle === 'string' ? displayTitle : '',
         })
       }
-      if (MenuItemButton !== null) {
-        return h(MenuItemButton, { icon: h(BoxMenuIcon), onSelect: open }, t('menu.item'))
+      const unpin = () => {
+        if (box === undefined) return
+        setMenuOpen(false)
+        void unpinInBox(box.id, sessionId)
       }
-      return h('button', {
-        type: 'button',
-        role: 'menuitem',
-        className: 'dsb-menu-item',
-        onClick: open,
-      }, h(BoxMenuIcon), h('span', { children: t('menu.item') }))
+      if (MenuItemButton !== null) {
+        return h(
+          React.Fragment,
+          null,
+          h(MenuItemButton, { icon: h(BoxMenuIcon), onSelect: open }, t('menu.item')),
+          pinned
+            ? h(MenuItemButton, {
+              icon: h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)),
+              onSelect: unpin,
+            }, t('menu.unpinBox', { name: box.name }))
+            : null,
+        )
+      }
+      return h(
+        React.Fragment,
+        null,
+        h('button', {
+          type: 'button',
+          role: 'menuitem',
+          className: 'dsb-menu-item',
+          onClick: open,
+        }, h(BoxMenuIcon), h('span', { children: t('menu.item') })),
+        pinned
+          ? h('button', {
+            type: 'button',
+            role: 'menuitem',
+            className: 'dsb-menu-item',
+            onClick: unpin,
+          }, h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)), h('span', { children: t('menu.unpinBox', { name: box.name }) }))
+          : null,
+      )
     }
 
     /* ------------------------------------------------------------------ *
@@ -2284,6 +2332,7 @@ window.__ModuleLoader__.load({
     const CSS = [
       '.dsb-menu-item{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;padding:6px 10px;border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:18px;text-align:left;border-radius:var(--dsw-radius-sm,6px);cursor:pointer}',
       '.dsb-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.dsb-rowPin{display:inline-flex;align-items:center;justify-content:center;width:14px;height:16px;flex:none;margin-left:2px;opacity:.9}',
       '.dsb-h{display:flex;align-items:center;gap:6px;box-sizing:border-box;height:30px;flex:none;margin-top:8px !important;margin-right:0;margin-bottom:0;margin-left:0;padding:0 6px 0 calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,0px) + var(--dsh-workspace-indent,0px));border-radius:10px 10px 0 0;background:color-mix(in srgb, var(--dsb-color,#8B949E) 18%, transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--dsb-color,#8B949E) 45%, transparent),inset 3px 0 0 var(--dsb-parent-color, var(--dsb-color,#8B949E));color:var(--dsw-alias-label-primary);font-size:12px;line-height:16px;font-weight:600;user-select:none;position:relative;transition:background-color .12s ease}',
       '.dsb-h{cursor:grab}',
       '.dsb-h__chevBtn,.dsb-h__name,.dsb-h__action{cursor:pointer}',
@@ -2522,6 +2571,13 @@ window.__ModuleLoader__.load({
           order: 120,
           locale: NS,
         }, BoxMenuItem))
+
+        ctx.slots.inject('sidebar.session.row.trailing', () => ctx.slots.register({
+          name: 'sidebar.session.row.trailing',
+          id: 'session-boxes-pin',
+          order: 90,
+          locale: NS,
+        }, BoxPinBadge))
 
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay',

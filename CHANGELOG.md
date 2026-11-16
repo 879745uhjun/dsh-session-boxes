@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.6
+
+- A per-box pinned session now shows a pin marker in its own row, not only in the
+  box header.
+- The session row menu offers a box-scoped “Unpin inside <box>” item when the
+  session is pinned in its current box, so it can be released and reordered.
+- Pinned sessions that belong to a box are grouped inside that box; pinned
+  sessions without a box stay on top.
+
 ## 0.4.5
 
 - Pinned sessions can now be moved into boxes and sub-boxes. Membership takes

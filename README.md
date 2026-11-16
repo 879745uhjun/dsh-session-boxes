@@ -12,7 +12,7 @@ A session lives in exactly one box or sub-box at a time. Moving it elsewhere rem
 
 - **Boxes and one-level sub-boxes** — create, rename inline, recolor, reorder, delete; a parent delete promotes its sub-boxes to the top level. The parent frame runs continuously around its sub-boxes: sub-boxes are inset inside the same card instead of floating as separate cards.
 - **Single location** — choose one box or sub-box from the row menu; “Ungrouped” clears the location. The old location is replaced.
-- **Per-box pin** — pin a session to the top of one box or sub-box from that box's settings; it does not touch the native global pin. Pinned rows sort first and carry a colored pin badge in the box header.
+- **Per-box pin** — pin a session to the top of one box or sub-box from that box's settings; it does not touch the native global pin. Pinned rows sort first, carry a colored pin badge in the box header, and show a pin marker in the row itself. The row's “...” menu offers **Unpin inside <box>** so a pinned session can be released and reordered.
 - **Drag to reorder** — drag a box header onto another header at the same level to change the custom order. Sub-boxes reorder among their siblings; the manager and box settings also have up/down buttons.
 - **Drag sessions** — drag a session row onto a box header to move it there; drop it on **Ungrouped** to clear its location.
 - **Manager** — the box button in the workspace section header (beside search, view options, and add workspace) opens a manager for the whole tree: create top-level boxes, add a sub-box with `+`, rename/recolor/reorder/delete, and open a box's settings.
