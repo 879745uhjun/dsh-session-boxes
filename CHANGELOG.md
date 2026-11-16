@@ -1,17 +1,36 @@
-# 更新日志 · Changelog
+# Changelog
 
-本文件记录 dsh-session-boxes 的每次可见变化。版本号遵循语义化版本；此前的迭代只在本地工作区进行，
-本仓库从 0.4.4 起有可追溯的提交历史。
+## 0.4.5
 
-## 0.4.4 — 2026-11-15
+- Pinned sessions can now be moved into boxes and sub-boxes. Membership takes
+  precedence over the native pin; pinned sessions with no box still stay on top.
+- A pinned session inside a box sorts first in that box and keeps its native pin
+  marker.
+- Moving a session into a collapsed box (or a box inside a collapsed parent)
+  expands the target so the move is visible.
+- Session titles in the box-settings member list and the location dialog now use
+  the full row width, wrap instead of truncating, and fall back to the session id
+  when no title is available.
+- The “Move to session box…” row-menu item now carries the plugin's box icon.
 
-首个公开版本：为左侧工作区的会话提供自定义分组箱子，以及一层子箱子。
+## 0.4.0
 
-### 新增
+- One-level sub-boxes (folders) with create, rename, recolor, parent change,
+  sibling reorder, and promotion of children when a parent is deleted.
+- The parent card frame now runs continuously around its sub-boxes; sub-boxes are
+  inset inside the same frame instead of floating as separate cards.
+- Sessions live in exactly one box or sub-box; choosing a new location moves the
+  session instead of duplicating a mirrored row.
+- Per-box pinning: pin a session to the top of one box without touching the
+  native global pin.
+- Box headers are draggable to reorder siblings; the manager and box settings
+  also expose up/down and a parent selector.
+- Theme-aware primary/secondary/danger buttons using DSH theme tokens.
+- Box manager button in the workspace section header; manager supports creating
+  top-level boxes and sub-boxes, settings, reorder, and delete.
 
-- **箱子 + 一层子箱子**：新建、就地改名、改色、排序、删除；删除父箱时子箱子提升到顶层，父箱外框连续包住子箱子。
-- **单位置归属**：会话菜单里选择一个箱子或子箱子，「未分组」清空位置；选择新位置会替换旧位置，不会重复出现。
-- **箱内置顶**：在箱子设置里把会话钉到该箱子顶部，不影响原生全局置顶，标题显示图钉数量。
-- **拖动排序与拖动会话**：拖动箱子标题在同级间排序；把会话行拖到箱子标题上即可移动。
-- **管理器**：工作区标题栏的箱子按钮打开整棵树，支持新建顶层箱子、`+` 新建子箱子、改名改色、排序、删除。
-- **持久化**：箱子与归属写在 `~/.dsh/session-boxes.json`，通过同源 `/session-boxes` 路由读写。
+## 0.1.0
+
+- Initial release: durable custom session boxes in the workspace sidebar,
+  custom names and colors, drag or menu assignment, collapse, and the
+  `session_boxes` agent tool.

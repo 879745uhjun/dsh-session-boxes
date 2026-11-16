@@ -20,7 +20,7 @@ A session lives in exactly one box or sub-box at a time. Moving it elsewhere rem
 - **Durable** — boxes, sub-boxes, memberships, and per-box pins live in `~/.dsh/session-boxes.json` on the Host.
 - **Agent tool** — `session_boxes` can list, create (with `parentId`), rename, delete, move, assign, pin, unpin, and collapse boxes.
 
-Pinned and blank sessions stay on top and are not classified. The native “Show more” watermark expands automatically while boxes are in use; choosing “Show less” yourself is respected.
+Blank **New Session** rows, and pinned sessions that have no box, stay on top. A pinned session that belongs to a box is shown inside that box and sorts first, keeping its native pin marker. The native “Show more” watermark expands automatically while boxes are in use; choosing “Show less” yourself is respected.
 
 ## Install
 

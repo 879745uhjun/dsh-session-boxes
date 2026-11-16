@@ -414,6 +414,7 @@ window.__ModuleLoader__.load({
     function setMembership(sessionId, boxId, on) {
       const current = membershipIds(sessionId)
       const next = on ? [boxId] : current.filter((id) => id !== boxId)
+      if (on) expandBox(boxId)
       const state = dataStore.getSnapshot()
       const memberships = { ...state.memberships }
       if (next.length === 0) delete memberships[sessionId]
@@ -546,6 +547,17 @@ window.__ModuleLoader__.load({
     function setCollapsed(boxId, collapsed) {
       const boxes = dataStore.getSnapshot().boxes.map((box) => (box.id === boxId ? { ...box, collapsed } : box))
       return commit('update', { boxId, collapsed }, (state) => ({ ...state, boxes }))
+    }
+
+    function expandBox(boxId) {
+      const state = dataStore.getSnapshot()
+      const box = state.boxes.find((entry) => entry.id === boxId)
+      if (box === undefined) return
+      if (box.collapsed) void setCollapsed(boxId, false)
+      if (box.parentId !== null) {
+        const parent = state.boxes.find((entry) => entry.id === box.parentId)
+        if (parent !== undefined && parent.collapsed) void setCollapsed(parent.id, false)
+      }
     }
 
     function setUngroupedCollapsed(collapsed) {
@@ -1251,10 +1263,14 @@ window.__ModuleLoader__.load({
         return new Map(((state.pins ?? {})[boxId] ?? []).map((id, index) => [id, index]))
       }
 
-      function sortPinned(list, rank) {
+      function sortPinned(list, rank, nativePinned) {
         return [...list].sort((left, right) => {
-          const leftRank = rank.has(left.sessionId) ? rank.get(left.sessionId) : Number.MAX_SAFE_INTEGER
-          const rightRank = rank.has(right.sessionId) ? rank.get(right.sessionId) : Number.MAX_SAFE_INTEGER
+          const leftRank = rank.has(left.sessionId)
+            ? rank.get(left.sessionId)
+            : (nativePinned.has(left.sessionId) ? 100000 : Number.MAX_SAFE_INTEGER)
+          const rightRank = rank.has(right.sessionId)
+            ? rank.get(right.sessionId)
+            : (nativePinned.has(right.sessionId) ? 100000 : Number.MAX_SAFE_INTEGER)
           return leftRank - rightRank
         })
       }
@@ -1279,13 +1295,14 @@ window.__ModuleLoader__.load({
         const byBox = new Map(state.boxes.map((box) => [box.id, []]))
         for (const entry of entries) {
           const sessionId = entry.key.slice(SESSION_PREFIX.length)
-          if (pinned.has(sessionId) || isBlank(sessionId)) {
+          if (isBlank(sessionId)) {
             topRows.push(entry)
             continue
           }
           const memberIds = (state.memberships[sessionId] ?? []).filter((boxId) => byBox.has(boxId))
           if (memberIds.length === 0) {
-            ungroupedRows.push(entry)
+            if (pinned.has(sessionId)) topRows.push(entry)
+            else ungroupedRows.push(entry)
             continue
           }
           const box = state.boxes.find((candidate) => memberIds.includes(candidate.id))
@@ -1316,7 +1333,7 @@ window.__ModuleLoader__.load({
             continue
           }
           const directPins = pinRankFor(state, box.id)
-          const directMembers = sortPinned(direct, directPins)
+          const directMembers = sortPinned(direct, directPins, pinned)
           const parentColor = COLOR_HEX[box.color] ?? COLOR_HEX.blue
           const header = ensureBoxHeader(section, box, 0)
           header.style.removeProperty('--dsb-parent-color')
@@ -1343,7 +1360,7 @@ window.__ModuleLoader__.load({
           }
           for (const child of visibleChildren) {
             const childPins = pinRankFor(state, child.id)
-            const childMembers = sortPinned(byBox.get(child.id) ?? [], childPins)
+            const childMembers = sortPinned(byBox.get(child.id) ?? [], childPins, pinned)
             const childHeader = ensureBoxHeader(section, child, 1)
             childHeader.style.setProperty('--dsb-parent-color', parentColor)
             usedHeaders.add(childHeader)

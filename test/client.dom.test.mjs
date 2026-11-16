@@ -442,32 +442,45 @@ async function multiSectionScenario() {
 
 async function pinnedAndBlankScenario() {
   const { browser, page } = await openPage(html([
-    section('w1', 'Workplace', [['s1', 'Alpha'], ['s2', 'Beta'], ['s3', 'Pinned'], ['s4', 'Blank']], false),
+    section('w1', 'Workplace', [['s1', 'Alpha'], ['s2', 'Beta'], ['s3', 'Pinned'], ['s4', 'Blank'], ['s5', 'Pinned loose']], false),
   ]))
   try {
     await installStore(page, {
       memberships: { s1: ['b_front'], s2: ['b_study'], s3: ['b_front'] },
-      pinned: ['s3'],
+      pinned: ['s3', 's5'],
       blank: ['s4'],
     })
     const result = await page.evaluate(() => {
       const section = document.querySelector('[data-section="w1"]')
       const front = section.querySelector('[data-dsb-box="b_front"]')
-      const top = section.querySelector('[data-row-key="session:s3"]')
       const blank = section.querySelector('[data-row-key="session:s4"]')
+      const s1 = section.querySelector('[data-row-key="session:s1"]')
+      const s3 = section.querySelector('[data-row-key="session:s3"]')
+      const s5 = section.querySelector('[data-row-key="session:s5"]')
       const ungrouped = section.querySelector('[data-dsb-box="__ungrouped__"]')
+      const boxOf = (row) => {
+        const unit = row.closest('[data-dsb-row-box]')
+        return unit === null ? null : unit.getAttribute('data-dsb-row-box')
+      }
       return {
-        topOrder: Number(top.style.order),
+        s3Order: Number(s3.style.order),
+        s1Order: Number(s1.style.order),
+        s5Order: Number(s5.style.order),
         blankOrder: Number(blank.style.order),
         frontOrder: Number(front.style.order),
         ungroupedOrder: Number(ungrouped.style.order),
+        s3Box: boxOf(s3),
+        s5Box: boxOf(s5),
         s3Clone: section.querySelector('.dsb-clone[data-dsb-clone-of="s3"]') !== null,
-        s3InUngrouped: ungrouped !== null && Number(top.style.order) > Number(ungrouped.style.order),
+        s3InUngrouped: ungrouped !== null && Number(s3.style.order) > Number(ungrouped.style.order),
       }
     })
-    assert.ok(result.topOrder < result.frontOrder)
     assert.ok(result.blankOrder < result.frontOrder)
-    assert.ok(result.topOrder < result.blankOrder)
+    assert.ok(result.s3Order > result.frontOrder)
+    assert.ok(result.s3Order < result.s1Order)
+    assert.ok(result.s5Order < result.frontOrder)
+    assert.equal(result.s3Box, 'b_front')
+    assert.equal(result.s5Box, null)
     assert.equal(result.s3Clone, false)
     assert.equal(result.s3InUngrouped, false)
     console.log('client scenario 3 passed')
