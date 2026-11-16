@@ -598,7 +598,15 @@ async function applyScenario() {
             return () => {}
           },
         },
-        get() {
+        get(key) {
+          if (key === 'contextMenus') {
+            return {
+              register(contribution) {
+                window.__contextContribution = contribution
+                return () => {}
+              },
+            }
+          }
           return undefined
         },
       }
@@ -607,6 +615,22 @@ async function applyScenario() {
         json: async () => ({ ok: true, state: { boxes: [], memberships: {}, ungroupedCollapsed: false } }),
       })
       definition.apply(fakeCtx)
+      const contribution = window.__contextContribution
+      const menuActions = contribution === undefined || contribution === null
+        ? []
+        : contribution.resolve({ sessionId: 's1', displayTitle: 'Alpha' }, new AbortController().signal)
+      window.__DSH_SESSION_BOXES_TEST_API__.dataStore.set({
+        status: 'ready',
+        boxes: [{ id: 'b1', name: 'Box', color: 'blue', collapsed: false, parentId: null, order: 0 }],
+        memberships: { s1: ['b1'] },
+        pins: { b1: ['s1'] },
+        ungroupedCollapsed: false,
+        revision: 1,
+        error: null,
+      })
+      const menuActionsWithBox = contribution === undefined || contribution === null
+        ? []
+        : contribution.resolve({ sessionId: 's1', displayTitle: 'Alpha' }, new AbortController().signal)
       document.documentElement.style.setProperty('--dsw-alias-button-primary-fill', 'rgb(18, 52, 86)')
       document.documentElement.style.setProperty('--dsw-alias-label-primary-foreground', 'rgb(171, 205, 239)')
       const button = document.createElement('button')
@@ -671,12 +695,21 @@ async function applyScenario() {
         modalWidth: modalRect.width,
         pinRight: pinRect.right,
         modalRight: modalRect.right,
+        contextTarget: contribution?.target,
+        contextOrder: contribution?.order,
+        menuLabel: menuActions[0]?.label,
+        menuChildLabel: menuActions[0]?.children?.[0]?.label,
+        menuChildIcon: menuActions[0]?.children?.[0]?.icon?.key,
+        menuChildren: menuActions[0]?.children?.length,
+        menuPinLabel: menuActionsWithBox[0]?.children?.[1]?.label,
+        menuPinIcon: menuActionsWithBox[0]?.children?.[1]?.icon?.key,
       }
     })
     assert.deepEqual(result.slots.sort(), [
+      'contextMenu.icon',
+      'contextMenu.icon',
       'shell.overlay',
       'shell.overlay',
-      'sidebar.workspaces.session.menu.item',
     ])
     assert.equal(result.hasZh, true)
     assert.equal(result.hasEn, true)
@@ -685,6 +718,14 @@ async function applyScenario() {
     assert.ok(result.components.every((type) => type === 'function'))
     assert.equal(result.buttonBg, 'rgb(18, 52, 86)')
     assert.equal(result.buttonColor, 'rgb(171, 205, 239)')
+    assert.equal(result.contextTarget, 'session')
+    assert.equal(result.contextOrder, 500)
+    assert.equal(result.menuLabel, 'session-boxes:menu.settings')
+    assert.equal(result.menuChildLabel, 'session-boxes:menu.item')
+    assert.equal(result.menuChildIcon, 'session-boxes.box')
+    assert.equal(result.menuChildren, 1)
+    assert.equal(result.menuPinLabel, 'session-boxes:menu.unpinBox')
+    assert.equal(result.menuPinIcon, 'session-boxes.pin')
     assert.equal(result.hasCheckRule, true)
     assert.equal(result.checkDisplay, 'flex')
     assert.equal(result.nameFlex, '1')

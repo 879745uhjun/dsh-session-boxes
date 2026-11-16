@@ -24,14 +24,6 @@ window.__ModuleLoader__.load({
     const h = React.createElement
     const { useEffect, useState, useSyncExternalStore } = React
 
-    let MenuItemButton = null
-    try {
-      const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
-      if (primitives && typeof primitives.MenuItemButton === 'function') MenuItemButton = primitives.MenuItemButton
-    } catch {
-      MenuItemButton = null
-    }
-
     const NS = 'session-boxes'
     const ENDPOINT = '/session-boxes'
     const UNGROUPED = '__ungrouped__'
@@ -52,6 +44,7 @@ window.__ModuleLoader__.load({
 
     const ZH = {
       'action.title': '移入分组箱子',
+      'menu.settings': '箱子设置',
       'menu.item': '移入分组箱子…',
       'dialog.session.title': '分组箱子',
       'dialog.session.hint': '一个会话只会在一个箱子或子箱子里显示；选择新位置会移动它。',
@@ -119,6 +112,7 @@ window.__ModuleLoader__.load({
 
     const EN = {
       'action.title': 'Move to a session box',
+      'menu.settings': 'Box settings',
       'menu.item': 'Move to session box…',
       'dialog.session.title': 'Session boxes',
       'dialog.session.hint': 'A session appears in only one box or sub-box; choosing a new place moves it.',
@@ -2264,82 +2258,11 @@ window.__ModuleLoader__.load({
       return null
     }
 
-    function BoxMenuItem({ sessionId, displayTitle, useMenuOpenState, t }) {
-      const state = useBoxes()
-      const useMenu = typeof useMenuOpenState === 'function' ? useMenuOpenState : () => [false, () => {}]
-      const [, setMenuOpen] = useMenu()
-      const box = state.boxes.find((entry) => (state.memberships[sessionId] ?? []).includes(entry.id))
-      const pinned = box !== undefined && ((state.pins ?? {})[box.id] ?? []).includes(sessionId)
-      const open = () => {
-        setMenuOpen(false)
-        openDialog({
-          kind: 'session',
-          sessionId,
-          title: typeof displayTitle === 'string' ? displayTitle : '',
-        })
-      }
-      const unpin = () => {
-        if (box === undefined) return
-        setMenuOpen(false)
-        void unpinInBox(box.id, sessionId)
-      }
-      const pin = () => {
-        if (box === undefined) return
-        setMenuOpen(false)
-        void pinInBox(box.id, sessionId)
-      }
-      if (MenuItemButton !== null) {
-        return h(
-          React.Fragment,
-          null,
-          h(MenuItemButton, { icon: h(BoxMenuIcon), onSelect: open }, t('menu.item')),
-          box === undefined
-            ? null
-            : pinned
-              ? h(MenuItemButton, {
-                icon: h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)),
-                onSelect: unpin,
-              }, t('menu.unpinBox', { name: box.name }))
-              : h(MenuItemButton, {
-                icon: h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)),
-                onSelect: pin,
-              }, t('menu.pinBox', { name: box.name })),
-        )
-      }
-      return h(
-        React.Fragment,
-        null,
-        h('button', {
-          type: 'button',
-          role: 'menuitem',
-          className: 'dsb-menu-item',
-          onClick: open,
-        }, h(BoxMenuIcon), h('span', { children: t('menu.item') })),
-        box === undefined
-          ? null
-          : pinned
-            ? h('button', {
-              type: 'button',
-              role: 'menuitem',
-              className: 'dsb-menu-item',
-              onClick: unpin,
-            }, h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)), h('span', { children: t('menu.unpinBox', { name: box.name }) }))
-            : h('button', {
-              type: 'button',
-              role: 'menuitem',
-              className: 'dsb-menu-item',
-              onClick: pin,
-            }, h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)), h('span', { children: t('menu.pinBox', { name: box.name }) })),
-      )
-    }
-
     /* ------------------------------------------------------------------ *
      * Styles
      * ------------------------------------------------------------------ */
 
     const CSS = [
-      '.dsb-menu-item{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;padding:6px 10px;border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:18px;text-align:left;border-radius:var(--dsw-radius-sm,6px);cursor:pointer}',
-      '.dsb-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.dsb-h{display:flex;align-items:center;gap:6px;box-sizing:border-box;height:30px;flex:none;margin-top:8px !important;margin-right:0;margin-bottom:0;margin-left:0;padding:0 6px 0 calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,0px) + var(--dsh-workspace-indent,0px));border-radius:10px 10px 0 0;background:color-mix(in srgb, var(--dsb-color,#8B949E) 18%, transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--dsb-color,#8B949E) 45%, transparent),inset 3px 0 0 var(--dsb-parent-color, var(--dsb-color,#8B949E));color:var(--dsw-alias-label-primary);font-size:12px;line-height:16px;font-weight:600;user-select:none;position:relative;transition:background-color .12s ease}',
       '.dsb-h{cursor:grab}',
       '.dsb-h__chevBtn,.dsb-h__name,.dsb-h__action{cursor:pointer}',
@@ -2482,7 +2405,7 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots', 'locale'],
+      inject: ['slots', 'locale', 'contextMenus'],
       apply(ctx) {
         ctx.effect(() => {
           const style = document.createElement('style')
@@ -2533,6 +2456,49 @@ window.__ModuleLoader__.load({
           const value = summary?.projectionValues?.title ?? summary?.title ?? summary?.displayTitle
           return typeof value === 'string' ? value : ''
         }
+        const menuT = ctx.locale.bind(NS)
+        const contextMenus = ctx.get('contextMenus')
+        if (contextMenus !== undefined) {
+          ctx.effect(() => contextMenus.register({
+            id: 'session-boxes-menu',
+            target: 'session',
+            order: 500,
+            resolve(target) {
+              const sessionId = target.sessionId
+              const state = dataStore.getSnapshot()
+              const box = state.boxes.find((entry) => (state.memberships[sessionId] ?? []).includes(entry.id))
+              const pinned = box !== undefined && ((state.pins ?? {})[box.id] ?? []).includes(sessionId)
+              const children = [{
+                id: 'session-boxes.move',
+                label: menuT('menu.item'),
+                icon: { key: 'session-boxes.box' },
+                run: () => {
+                  openDialog({
+                    kind: 'session',
+                    sessionId,
+                    title: typeof target.displayTitle === 'string' ? target.displayTitle : '',
+                  })
+                },
+              }]
+              if (box !== undefined) {
+                children.push({
+                  id: 'session-boxes.pin',
+                  label: pinned ? menuT('menu.unpinBox', { name: box.name }) : menuT('menu.pinBox', { name: box.name }),
+                  icon: { key: 'session-boxes.pin' },
+                  run: () => {
+                    void (pinned ? unpinInBox(box.id, sessionId) : pinInBox(box.id, sessionId))
+                  },
+                })
+              }
+              return [{
+                id: 'session-boxes.settings',
+                label: menuT('menu.settings'),
+                icon: { key: 'session-boxes.box' },
+                children,
+              }]
+            },
+          }), 'session-boxes: session menu')
+        }
         const engine = createDomEngine({
           store: dataStore,
           getT: () => tRef.current,
@@ -2574,12 +2540,15 @@ window.__ModuleLoader__.load({
           return null
         }
 
-        ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
-          name: 'sidebar.workspaces.session.menu.item',
-          id: 'session-boxes-menu',
-          order: 120,
-          locale: NS,
-        }, BoxMenuItem))
+        ctx.slots.inject('contextMenu.icon', () => ctx.slots.register({
+          name: 'contextMenu.icon',
+          key: 'session-boxes.box',
+        }, BoxMenuIcon))
+
+        ctx.slots.inject('contextMenu.icon', () => ctx.slots.register({
+          name: 'contextMenu.icon',
+          key: 'session-boxes.pin',
+        }, PinGlyph))
 
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay',

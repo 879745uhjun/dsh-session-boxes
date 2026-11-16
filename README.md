@@ -34,7 +34,7 @@ This package is a DSH bundle (`dsh.bundle.patch`). Install the directory with th
 - **Move a session**: open the row's `...` menu → **Move to session box…** → choose one box or sub-box (or Ungrouped). A new top-level box can be created from the same dialog.
 - **Manage the tree**: click the box button in the workspace section header. Use `+` on a top-level row to create a sub-box; “设置” opens name, color, parent, order, delete, members, and pin controls.
 - **Reorder boxes**: drag a box header onto another header at the same level, or use the manager's ↑/↓ buttons. In a box's settings, the parent selector moves a child between levels.
-- **Pin inside a box**: open the row's `...` menu and choose **Pin inside <box>** (the item appears when the session is already in a box), or open the box's `⋯` settings and click the pin at the right of a member. The session moves to the top of that box only; the same menu offers **Unpin inside <box>**.
+- **Pin inside a box**: open the row's `...` menu → **Box settings** → **Pin inside <box>** (the item appears when the session is already in a box), or open the box's `⋯` settings and click the pin at the right of a member. The session moves to the top of that box only; the same submenu offers **Unpin inside <box>**.
 - **Collapse**: click the chevron (or the box name). Collapsing a parent hides its direct rows and its sub-box cards.
 
 ## Notes and limitations

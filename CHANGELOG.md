@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.9
+
+- The session row menu now exposes one **Box settings** entry; “Move to session
+  box…” and the box-scoped pin/unpin action live in its submenu.
+- The submenu uses the shared context-menu service, so it gets native keyboard
+  navigation, icons, and viewport positioning.
+
 ## 0.4.8
 
 - The session row menu now offers a box-scoped **Pin inside <box>** item when the
