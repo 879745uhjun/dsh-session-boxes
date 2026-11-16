@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.8
+
+- The session row menu now offers a box-scoped **Pin inside <box>** item when the
+  session belongs to a box, matching the existing unpin item. Pinning is still
+  available from the box settings member list.
+
 ## 0.4.7
 
 - Removed the trailing pin icon from per-box pinned rows so it no longer takes

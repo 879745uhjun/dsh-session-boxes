@@ -103,6 +103,7 @@ window.__ModuleLoader__.load({
       'pin.untoggle': '取消箱子内置顶',
       'pin.hint': '点右侧图钉把会话固定到箱子顶部；不会影响原生置顶。',
       'pin.row': '箱内置顶：{name}',
+      'menu.pinBox': '在「{name}」箱内置顶',
       'menu.unpinBox': '取消在「{name}」箱内置顶',
       'error.save': '保存失败，请重试',
       'error.load': '分组数据暂时不可用',
@@ -169,6 +170,7 @@ window.__ModuleLoader__.load({
       'pin.untoggle': 'Unpin inside this box',
       'pin.hint': 'Use the pin on the right to keep a session at the top of this box; the native global pin is untouched.',
       'pin.row': 'Pinned in {name}',
+      'menu.pinBox': 'Pin inside “{name}”',
       'menu.unpinBox': 'Unpin inside “{name}”',
       'error.save': 'Could not save. Try again.',
       'error.load': 'Box data is unavailable',
@@ -2281,17 +2283,27 @@ window.__ModuleLoader__.load({
         setMenuOpen(false)
         void unpinInBox(box.id, sessionId)
       }
+      const pin = () => {
+        if (box === undefined) return
+        setMenuOpen(false)
+        void pinInBox(box.id, sessionId)
+      }
       if (MenuItemButton !== null) {
         return h(
           React.Fragment,
           null,
           h(MenuItemButton, { icon: h(BoxMenuIcon), onSelect: open }, t('menu.item')),
-          pinned
-            ? h(MenuItemButton, {
-              icon: h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)),
-              onSelect: unpin,
-            }, t('menu.unpinBox', { name: box.name }))
-            : null,
+          box === undefined
+            ? null
+            : pinned
+              ? h(MenuItemButton, {
+                icon: h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)),
+                onSelect: unpin,
+              }, t('menu.unpinBox', { name: box.name }))
+              : h(MenuItemButton, {
+                icon: h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)),
+                onSelect: pin,
+              }, t('menu.pinBox', { name: box.name })),
         )
       }
       return h(
@@ -2303,14 +2315,21 @@ window.__ModuleLoader__.load({
           className: 'dsb-menu-item',
           onClick: open,
         }, h(BoxMenuIcon), h('span', { children: t('menu.item') })),
-        pinned
-          ? h('button', {
-            type: 'button',
-            role: 'menuitem',
-            className: 'dsb-menu-item',
-            onClick: unpin,
-          }, h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)), h('span', { children: t('menu.unpinBox', { name: box.name }) }))
-          : null,
+        box === undefined
+          ? null
+          : pinned
+            ? h('button', {
+              type: 'button',
+              role: 'menuitem',
+              className: 'dsb-menu-item',
+              onClick: unpin,
+            }, h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)), h('span', { children: t('menu.unpinBox', { name: box.name }) }))
+            : h('button', {
+              type: 'button',
+              role: 'menuitem',
+              className: 'dsb-menu-item',
+              onClick: pin,
+            }, h('span', { style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue } }, h(PinGlyph)), h('span', { children: t('menu.pinBox', { name: box.name }) })),
       )
     }
 
