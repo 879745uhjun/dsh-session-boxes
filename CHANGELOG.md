@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.7
+
+- Removed the trailing pin icon from per-box pinned rows so it no longer takes
+  horizontal space.
+- Pinned rows now use a stronger tint, a double colored left spine, and a top
+  accent line; the box header keeps the pin count and the row menu keeps the
+  box-scoped unpin action.
+
 ## 0.4.6
 
 - A per-box pinned session now shows a pin marker in its own row, not only in the

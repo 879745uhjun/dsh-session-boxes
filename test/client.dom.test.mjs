@@ -676,7 +676,6 @@ async function applyScenario() {
     assert.deepEqual(result.slots.sort(), [
       'shell.overlay',
       'shell.overlay',
-      'sidebar.session.row.trailing',
       'sidebar.workspaces.session.menu.item',
     ])
     assert.equal(result.hasZh, true)

@@ -755,7 +755,7 @@ window.__ModuleLoader__.load({
         if (element.style.order !== text) element.style.order = text
       }
 
-      function setRowBox(unit, boxId, color, first, last, pinned, depth) {
+      function setRowBox(unit, boxId, color, first, last, pinned, depth, pinStart) {
         unit.setAttribute('data-dsb-row-box', boxId)
         unit.style.setProperty('--dsb-color', COLOR_HEX[color] ?? COLOR_HEX.blue)
         if (first) unit.setAttribute('data-dsb-row-first', '1')
@@ -764,6 +764,8 @@ window.__ModuleLoader__.load({
         else unit.removeAttribute('data-dsb-row-last')
         if (pinned) unit.setAttribute('data-dsb-pinned', '1')
         else unit.removeAttribute('data-dsb-pinned')
+        if (pinStart) unit.setAttribute('data-dsb-pin-start', '1')
+        else unit.removeAttribute('data-dsb-pin-start')
         if (depth > 0) unit.setAttribute('data-dsb-depth', String(depth))
         else unit.removeAttribute('data-dsb-depth')
       }
@@ -773,6 +775,7 @@ window.__ModuleLoader__.load({
         unit.removeAttribute('data-dsb-row-first')
         unit.removeAttribute('data-dsb-row-last')
         unit.removeAttribute('data-dsb-pinned')
+        unit.removeAttribute('data-dsb-pin-start')
         unit.removeAttribute('data-dsb-depth')
         unit.style.removeProperty('--dsb-color')
         unit.style.removeProperty('--dsb-parent-color')
@@ -1356,7 +1359,7 @@ window.__ModuleLoader__.load({
           })
           let lastItem = header
           for (const [index, member] of directMembers.entries()) {
-            setRowBox(member.unit, box.id, box.color, index === 0, index === directMembers.length - 1, directPins.has(member.sessionId), 0)
+            setRowBox(member.unit, box.id, box.color, index === 0, index === directMembers.length - 1, directPins.has(member.sessionId), 0, directPins.has(member.sessionId) && index === 0)
             member.unit.style.removeProperty('--dsb-parent-color')
             setOrder(member.unit, order)
             order += 1
@@ -1383,7 +1386,7 @@ window.__ModuleLoader__.load({
             setHidden(childHeader, box.collapsed)
             if (!box.collapsed) lastItem = childHeader
             for (const [index, member] of childMembers.entries()) {
-              setRowBox(member.unit, child.id, child.color, index === 0, index === childMembers.length - 1, childPins.has(member.sessionId), 1)
+              setRowBox(member.unit, child.id, child.color, index === 0, index === childMembers.length - 1, childPins.has(member.sessionId), 1, childPins.has(member.sessionId) && index === 0)
               member.unit.style.setProperty('--dsb-parent-color', parentColor)
               setOrder(member.unit, order)
               order += 1
@@ -1402,7 +1405,7 @@ window.__ModuleLoader__.load({
           order += 1
           updateUngroupedHeader(header, ungroupedRows.length, state.ungroupedCollapsed)
           for (const [index, entry] of ungroupedRows.entries()) {
-            setRowBox(entry.unit, UNGROUPED, 'gray', index === 0, index === ungroupedRows.length - 1, false, 0)
+            setRowBox(entry.unit, UNGROUPED, 'gray', index === 0, index === ungroupedRows.length - 1, false, 0, false)
             setOrder(entry.unit, order)
             order += 1
             setHidden(entry.unit, state.ungroupedCollapsed)
@@ -2259,20 +2262,6 @@ window.__ModuleLoader__.load({
       return null
     }
 
-    function BoxPinBadge({ sessionId, t }) {
-      const state = useBoxes()
-      const box = state.boxes.find((entry) => (state.memberships[sessionId] ?? []).includes(entry.id))
-      if (box === undefined) return null
-      if (!((state.pins ?? {})[box.id] ?? []).includes(sessionId)) return null
-      const label = t('pin.row', { name: box.name })
-      return h('span', {
-        className: 'dsb-rowPin',
-        style: { color: COLOR_HEX[box.color] ?? COLOR_HEX.blue },
-        title: label,
-        'aria-label': label,
-      }, h(PinGlyph))
-    }
-
     function BoxMenuItem({ sessionId, displayTitle, useMenuOpenState, t }) {
       const state = useBoxes()
       const useMenu = typeof useMenuOpenState === 'function' ? useMenuOpenState : () => [false, () => {}]
@@ -2332,7 +2321,6 @@ window.__ModuleLoader__.load({
     const CSS = [
       '.dsb-menu-item{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;padding:6px 10px;border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:18px;text-align:left;border-radius:var(--dsw-radius-sm,6px);cursor:pointer}',
       '.dsb-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}',
-      '.dsb-rowPin{display:inline-flex;align-items:center;justify-content:center;width:14px;height:16px;flex:none;margin-left:2px;opacity:.9}',
       '.dsb-h{display:flex;align-items:center;gap:6px;box-sizing:border-box;height:30px;flex:none;margin-top:8px !important;margin-right:0;margin-bottom:0;margin-left:0;padding:0 6px 0 calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,0px) + var(--dsh-workspace-indent,0px));border-radius:10px 10px 0 0;background:color-mix(in srgb, var(--dsb-color,#8B949E) 18%, transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--dsb-color,#8B949E) 45%, transparent),inset 3px 0 0 var(--dsb-parent-color, var(--dsb-color,#8B949E));color:var(--dsw-alias-label-primary);font-size:12px;line-height:16px;font-weight:600;user-select:none;position:relative;transition:background-color .12s ease}',
       '.dsb-h{cursor:grab}',
       '.dsb-h__chevBtn,.dsb-h__name,.dsb-h__action{cursor:pointer}',
@@ -2376,8 +2364,10 @@ window.__ModuleLoader__.load({
       '.dsb-pin{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex:none;padding:0;border:0;border-radius:var(--dsw-radius-sm,6px);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}',
       '.dsb-pin:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.dsb-pin.is-on{color:var(--dsb-color,#8B949E);background:color-mix(in srgb, var(--dsb-color,#8B949E) 16%, transparent)}',
-      '[data-dsb-row-box][data-dsb-pinned="1"]{background:color-mix(in srgb, var(--dsb-color,#8B949E) 13%, transparent);box-shadow:inset 3px 0 0 var(--dsb-parent-color, var(--dsb-color,#8B949E)),inset -1px 0 0 color-mix(in srgb, var(--dsb-parent-color, var(--dsb-color,#8B949E)) 45%, transparent)}',
-      '[data-dsb-row-box][data-dsb-pinned="1"][data-dsb-subtree-last]{box-shadow:inset 3px 0 0 var(--dsb-parent-color, var(--dsb-color,#8B949E)),inset -1px 0 0 color-mix(in srgb, var(--dsb-parent-color, var(--dsb-color,#8B949E)) 45%, transparent),inset 0 -1px 0 color-mix(in srgb, var(--dsb-parent-color, var(--dsb-color,#8B949E)) 45%, transparent)}',
+      '[data-dsb-row-box][data-dsb-pinned="1"]{background:color-mix(in srgb, var(--dsb-color,#8B949E) 14%, transparent);box-shadow:inset 6px 0 0 color-mix(in srgb, var(--dsb-color,#8B949E) 55%, transparent),inset 3px 0 0 var(--dsb-parent-color, var(--dsb-color,#8B949E)),inset -1px 0 0 color-mix(in srgb, var(--dsb-parent-color, var(--dsb-color,#8B949E)) 45%, transparent)}',
+      '[data-dsb-row-box][data-dsb-pinned="1"][data-dsb-pin-start="1"]{box-shadow:inset 0 2px 0 color-mix(in srgb, var(--dsb-color,#8B949E) 55%, transparent),inset 6px 0 0 color-mix(in srgb, var(--dsb-color,#8B949E) 55%, transparent),inset 3px 0 0 var(--dsb-parent-color, var(--dsb-color,#8B949E)),inset -1px 0 0 color-mix(in srgb, var(--dsb-parent-color, var(--dsb-color,#8B949E)) 45%, transparent)}',
+      '[data-dsb-row-box][data-dsb-pinned="1"][data-dsb-subtree-last]{box-shadow:inset 6px 0 0 color-mix(in srgb, var(--dsb-color,#8B949E) 55%, transparent),inset 3px 0 0 var(--dsb-parent-color, var(--dsb-color,#8B949E)),inset -1px 0 0 color-mix(in srgb, var(--dsb-parent-color, var(--dsb-color,#8B949E)) 45%, transparent),inset 0 -1px 0 color-mix(in srgb, var(--dsb-parent-color, var(--dsb-color,#8B949E)) 45%, transparent)}',
+      '[data-dsb-row-box][data-dsb-pinned="1"][data-dsb-pin-start="1"][data-dsb-subtree-last]{box-shadow:inset 0 2px 0 color-mix(in srgb, var(--dsb-color,#8B949E) 55%, transparent),inset 6px 0 0 color-mix(in srgb, var(--dsb-color,#8B949E) 55%, transparent),inset 3px 0 0 var(--dsb-parent-color, var(--dsb-color,#8B949E)),inset -1px 0 0 color-mix(in srgb, var(--dsb-parent-color, var(--dsb-color,#8B949E)) 45%, transparent),inset 0 -1px 0 color-mix(in srgb, var(--dsb-parent-color, var(--dsb-color,#8B949E)) 45%, transparent)}',
       '.dsb-clone{cursor:pointer}',
       '.dsb-clone:hover{background-color:color-mix(in srgb, var(--dsb-color,#8B949E) 12%, transparent)}',
       '.dsb-headerButton{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none;padding:0;border:0;border-radius:var(--dsw-radius-sm,6px);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}',
@@ -2571,13 +2561,6 @@ window.__ModuleLoader__.load({
           order: 120,
           locale: NS,
         }, BoxMenuItem))
-
-        ctx.slots.inject('sidebar.session.row.trailing', () => ctx.slots.register({
-          name: 'sidebar.session.row.trailing',
-          id: 'session-boxes-pin',
-          order: 90,
-          locale: NS,
-        }, BoxPinBadge))
 
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay',
