@@ -87,9 +87,14 @@ const baseBoxes = [
   { id: 'b_study', name: '学习', color: 'green', collapsed: false, order: 1 },
 ]
 
-async function installStore(page, { boxes = baseBoxes, memberships = {}, pins = {}, pinned = [], blank = [] } = {}) {
-  await page.evaluate(({ boxes, memberships, pins, pinned, blank }) => {
+async function installStore(page, { boxes = baseBoxes, memberships = {}, pins = {}, pinned = [], blank = [], stats = { stars: {}, todos: {} } } = {}) {
+  await page.evaluate(({ boxes, memberships, pins, pinned, blank, stats }) => {
     const api = window.__DSH_SESSION_BOXES_TEST_API__
+    api.statsStore.set({
+      stars: stats?.stars ?? {},
+      todos: stats?.todos ?? {},
+      revision: 1,
+    })
     const store = api.createStore({
       status: 'ready',
       boxes,
@@ -181,7 +186,7 @@ async function installStore(page, { boxes = baseBoxes, memberships = {}, pins = 
       autoExpand: false,
     })
     window.__engine.start()
-  }, { boxes, memberships, pins, pinned, blank })
+  }, { boxes, memberships, pins, pinned, blank, stats })
   await wait(page)
 }
 
@@ -981,6 +986,146 @@ async function subfolderScenario() {
   }
 }
 
+async function aggregateStatsScenario() {
+  const { browser, page } = await openPage(html([
+    section('w1', 'Workplace', [
+      ['s1', 'Alpha'],
+      ['s2', 'Beta'],
+      ['s3', 'Gamma'],
+      ['s4', 'Delta'],
+      ['s5', 'Epsilon'],
+    ], false),
+  ]))
+  try {
+    await installStore(page, {
+      boxes: [
+        { id: 'b_front', name: 'Front', color: 'blue', collapsed: false, parentId: null, order: 0 },
+        { id: 'b_sub', name: 'Sub', color: 'green', collapsed: false, parentId: 'b_front', order: 1 },
+        { id: 'b_other', name: 'Other', color: 'amber', collapsed: false, parentId: null, order: 2 },
+      ],
+      memberships: { s1: ['b_front'], s2: ['b_sub'], s3: ['b_other'], s4: ['b_front'], s5: ['b_sub'] },
+      stats: {
+        stars: { s1: 5, s2: 3, s3: 4, s4: 5, s5: 3 },
+        todos: { s1: true, s2: false, s3: true, s4: true, s5: false },
+      },
+    })
+    const result = await page.evaluate(() => {
+      const section = document.querySelector('[data-section="w1"]')
+      const api = window.__DSH_SESSION_BOXES_TEST_API__
+      const header = (id) => section.querySelector(`[data-dsb-box="${id}"]`)
+      const stat = (id, role) => header(id).querySelector(`[data-dsb-role="${role}"]`)
+      const fiveState = {
+        boxes: [{ id: 'b_five', name: 'Five', color: 'blue', collapsed: false, parentId: null, order: 0 }],
+        memberships: {
+          t1: ['b_five'], t2: ['b_five'], t3: ['b_five'], t4: ['b_five'], t5: ['b_five'],
+        },
+        pins: {},
+      }
+      const zero = api.computeBoxStats(fiveState, 'b_five', {
+        stars: {},
+        todos: { t1: false, t2: false, t3: false, t4: false, t5: false },
+      })
+      const all = api.computeBoxStats(fiveState, 'b_five', {
+        stars: {},
+        todos: { t1: true, t2: true, t3: true, t4: true, t5: true },
+      })
+      const empty = api.computeBoxStats({
+        boxes: [{ id: 'b_empty', name: 'Empty', color: 'blue', collapsed: false, parentId: null, order: 0 }],
+        memberships: {},
+        pins: {},
+      }, 'b_empty', { stars: {}, todos: {} })
+      return {
+        parentStars: stat('b_front', 'statStars').textContent,
+        parentTodos: stat('b_front', 'statTodos').textContent,
+        parentDisplay: header('b_front').querySelector('[data-dsb-role="stats"]').style.display,
+        childStars: stat('b_sub', 'statStars').textContent,
+        childTodos: stat('b_sub', 'statTodos').textContent,
+        otherStars: stat('b_other', 'statStars').textContent,
+        otherTodos: stat('b_other', 'statTodos').textContent,
+        zeroTodos: zero.todos,
+        zeroStars: zero.stars,
+        allTodos: all.todos,
+        emptyStars: empty.stars,
+        emptyTodos: empty.todos,
+        headerCount: section.querySelectorAll(':scope > .dsb-h').length,
+      }
+    })
+    assert.equal(result.parentStars, '★ 4.0')
+    assert.equal(result.parentTodos, '☑ 2/4')
+    assert.equal(result.parentDisplay, '')
+    assert.equal(result.childStars, '★ 3.0')
+    assert.equal(result.childTodos, '☑ 0/2')
+    assert.equal(result.otherStars, '★ 4.0')
+    assert.equal(result.otherTodos, '☑ 1/1')
+    assert.equal(result.zeroTodos, '0/5')
+    assert.equal(result.allTodos, '5/5')
+    assert.equal(result.zeroStars, null)
+    assert.equal(result.emptyStars, null)
+    assert.equal(result.emptyTodos, null)
+    assert.ok(result.headerCount >= 3)
+
+    // Ratings disappearing hides only the star segment; todos keep working.
+    await page.evaluate(() => {
+      window.__DSH_SESSION_BOXES_TEST_API__.statsStore.set({
+        stars: {},
+        todos: { s1: true, s4: true },
+        revision: 2,
+      })
+    })
+    await wait(page)
+    const noRatings = await page.evaluate(() => {
+      const section = document.querySelector('[data-section="w1"]')
+      const header = (id) => section.querySelector(`[data-dsb-box="${id}"]`)
+      return {
+        starDisplay: header('b_front').querySelector('[data-dsb-role="statStars"]').style.display,
+        todoText: header('b_front').querySelector('[data-dsb-role="statTodos"]').textContent,
+      }
+    })
+    assert.equal(noRatings.starDisplay, 'none')
+    assert.equal(noRatings.todoText, '☑ 2/2')
+
+    // 404 on stars and broken JSON on todos: both segments disappear, headers stay.
+    await page.evaluate(async () => {
+      window.fetch = async (url) => {
+        if (String(url).includes('session-stars')) return { ok: false, status: 404 }
+        return {
+          ok: true,
+          json: async () => {
+            throw new Error('bad json')
+          },
+        }
+      }
+      await window.__DSH_SESSION_BOXES_TEST_API__.refreshStats()
+    })
+    await wait(page)
+    const degraded = await page.evaluate(() => {
+      const section = document.querySelector('[data-section="w1"]')
+      const header = (id) => section.querySelector(`[data-dsb-box="${id}"]`)
+      const stats = header('b_front').querySelector('[data-dsb-role="stats"]')
+      const name = header('b_front').querySelector('[data-dsb-role="name"]')
+      return {
+        statsDisplay: stats.style.display,
+        starDisplay: header('b_front').querySelector('[data-dsb-role="statStars"]').style.display,
+        todoDisplay: header('b_front').querySelector('[data-dsb-role="statTodos"]').style.display,
+        name: name.textContent,
+        headers: section.querySelectorAll(':scope > .dsb-h').length,
+        stars: window.__DSH_SESSION_BOXES_TEST_API__.statsStore.getSnapshot().stars,
+        todos: window.__DSH_SESSION_BOXES_TEST_API__.statsStore.getSnapshot().todos,
+      }
+    })
+    assert.equal(degraded.statsDisplay, 'none')
+    assert.equal(degraded.starDisplay, 'none')
+    assert.equal(degraded.todoDisplay, 'none')
+    assert.equal(degraded.name, 'Front')
+    assert.ok(degraded.headers >= 3)
+    assert.deepEqual(degraded.stars, {})
+    assert.deepEqual(degraded.todos, {})
+    console.log('client scenario 9 passed')
+  } finally {
+    await browser.close()
+  }
+}
+
 async function autoExpandScenario() {
   const { browser, page } = await openPage(html([
     section('w1', 'Workplace', [['s1', 'Alpha']], true),
@@ -1026,5 +1171,6 @@ await wrappedRowScenario()
 await applyScenario()
 await pinAndDragScenario()
 await subfolderScenario()
+await aggregateStatsScenario()
 await autoExpandScenario()
 console.log('all client DOM tests passed')

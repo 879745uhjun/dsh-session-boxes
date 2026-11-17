@@ -31,6 +31,8 @@
   "header.expand": "Expand",
   "header.drop": "Drop here to add",
   "header.count": "{n} sessions",
+  "header.stars": "Average member stars {stars}",
+  "header.todos": "Member todo completion {done}/{total}",
   "error.save": "Could not save. Try again.",
   "error.load": "Box data is unavailable",
   "color.blue": "Blue",

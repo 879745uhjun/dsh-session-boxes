@@ -91,6 +91,8 @@ window.__ModuleLoader__.load({
       'header.drop': '拖到这里加入',
       'header.count': '{n} 个会话',
       'header.pinned': '{n} 个置顶',
+      'header.stars': '成员平均星级 {stars}',
+      'header.todos': '成员待办完成度 {done}/{total}',
       'header.subs': '{n} 个子箱子',
       'pin.toggle': '在箱子内置顶',
       'pin.untoggle': '取消箱子内置顶',
@@ -159,6 +161,8 @@ window.__ModuleLoader__.load({
       'header.drop': 'Drop here to add',
       'header.count': '{n} sessions',
       'header.pinned': '{n} pinned',
+      'header.stars': 'Average member stars {stars}',
+      'header.todos': 'Member todo completion {done}/{total}',
       'header.subs': '{n} sub-boxes',
       'pin.toggle': 'Pin inside this box',
       'pin.untoggle': 'Unpin inside this box',
@@ -324,6 +328,110 @@ window.__ModuleLoader__.load({
       revision: 0,
       error: null,
     })
+
+    const statsStore = createStore({ stars: {}, todos: {}, revision: 0 })
+    const STATS_TIMEOUT_MS = 1500
+    let statsRefreshPromise = null
+
+    function normalizeStars(raw) {
+      const stars = {}
+      if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return stars
+      for (const [sessionId, entry] of Object.entries(raw)) {
+        const value = Number(entry?.stars)
+        if (!Number.isInteger(value) || value < 1 || value > 5) continue
+        stars[sessionId] = value
+      }
+      return stars
+    }
+
+    function normalizeTodoDone(raw) {
+      const todos = {}
+      if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return todos
+      for (const [sessionId, entry] of Object.entries(raw)) {
+        if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue
+        if (typeof entry.done !== 'boolean') continue
+        todos[sessionId] = entry.done
+      }
+      return todos
+    }
+
+    /** Session ids in one box, including every nested sub-box. */
+    function memberIdsForBox(state, boxId) {
+      const ids = new Set()
+      const visited = new Set()
+      const walk = (currentId) => {
+        if (visited.has(currentId)) return
+        visited.add(currentId)
+        for (const [sessionId, boxIds] of Object.entries(state.memberships)) {
+          if (Array.isArray(boxIds) && boxIds.includes(currentId)) ids.add(sessionId)
+        }
+        for (const box of state.boxes) {
+          if (box.parentId === currentId) walk(box.id)
+        }
+      }
+      walk(boxId)
+      return ids
+    }
+
+    function computeBoxStats(state, boxId, stats) {
+      const ids = memberIdsForBox(state, boxId)
+      let starSum = 0
+      let starCount = 0
+      let todoDone = 0
+      let todoTotal = 0
+      for (const sessionId of ids) {
+        const rating = stats?.stars?.[sessionId]
+        if (Number.isInteger(rating) && rating >= 1 && rating <= 5) {
+          starSum += rating
+          starCount += 1
+        }
+        if (Object.hasOwn(stats?.todos ?? {}, sessionId)) {
+          todoTotal += 1
+          if (stats.todos[sessionId] === true) todoDone += 1
+        }
+      }
+      return {
+        stars: starCount > 0 ? (starSum / starCount).toFixed(1) : null,
+        todos: todoTotal > 0 ? `${todoDone}/${todoTotal}` : null,
+        todoDone,
+        todoTotal,
+      }
+    }
+
+    async function fetchStatsJson(url) {
+      const controller = new AbortController()
+      const timer = window.setTimeout(() => controller.abort(), STATS_TIMEOUT_MS)
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: { accept: 'application/json' },
+          cache: 'no-store',
+        })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const payload = await response.json()
+        if (payload === null || payload?.ok !== true) throw new Error('invalid response')
+        return payload
+      } finally {
+        window.clearTimeout(timer)
+      }
+    }
+
+    async function refreshStats() {
+      if (statsRefreshPromise !== null) return statsRefreshPromise
+      statsRefreshPromise = (async () => {
+        const [starsResult, todosResult] = await Promise.allSettled([
+          fetchStatsJson('/session-stars'),
+          fetchStatsJson('/session-todos'),
+        ])
+        const stars = starsResult.status === 'fulfilled' ? normalizeStars(starsResult.value.ratings) : {}
+        const todos = todosResult.status === 'fulfilled' ? normalizeTodoDone(todosResult.value.todos) : {}
+        const current = statsStore.getSnapshot()
+        statsStore.set({ stars, todos, revision: current.revision + 1 })
+      })().finally(() => {
+        statsRefreshPromise = null
+      })
+      return statsRefreshPromise
+    }
 
     let refreshPromise = null
     let mutationChain = Promise.resolve()
@@ -606,6 +714,7 @@ window.__ModuleLoader__.load({
       let running = false
       let observer = null
       let unsubscribe = null
+      let unsubscribeStats = null
       let timer = 0
       let interval = 0
       let resizeTimer = 0
@@ -660,6 +769,7 @@ window.__ModuleLoader__.load({
         document.addEventListener('click', onDocumentClick, true)
         window.addEventListener('resize', onResize)
         unsubscribe = store.subscribe(() => schedule())
+        unsubscribeStats = statsStore.subscribe(() => schedule())
         interval = window.setInterval(() => {
           if (store.getSnapshot().boxes.length > 0) schedule()
         }, 1500)
@@ -673,6 +783,8 @@ window.__ModuleLoader__.load({
         observer = null
         if (unsubscribe !== null) unsubscribe()
         unsubscribe = null
+        if (unsubscribeStats !== null) unsubscribeStats()
+        unsubscribeStats = null
         document.removeEventListener('click', onDocumentClick, true)
         window.removeEventListener('resize', onResize)
         if (timer !== 0) window.clearTimeout(timer)
@@ -857,6 +969,33 @@ window.__ModuleLoader__.load({
           subs.style.display = childCount > 0 ? '' : 'none'
           subs.title = t('header.subs', { n: String(childCount) })
           if (subsCount !== null && subsCount.textContent !== String(childCount)) subsCount.textContent = String(childCount)
+        }
+        const statsBox = header.querySelector('[data-dsb-role="stats"]')
+        const statStars = header.querySelector('[data-dsb-role="statStars"]')
+        const statTodos = header.querySelector('[data-dsb-role="statTodos"]')
+        const aggregate = descriptor.stats ?? { stars: null, todos: null, todoDone: 0, todoTotal: 0 }
+        if (statStars !== null) {
+          if (aggregate.stars === null) {
+            statStars.style.display = 'none'
+            statStars.textContent = ''
+          } else {
+            statStars.style.display = ''
+            statStars.textContent = `★ ${aggregate.stars}`
+            statStars.title = t('header.stars', { stars: aggregate.stars })
+          }
+        }
+        if (statTodos !== null) {
+          if (aggregate.todos === null) {
+            statTodos.style.display = 'none'
+            statTodos.textContent = ''
+          } else {
+            statTodos.style.display = ''
+            statTodos.textContent = `☑ ${aggregate.todos}`
+            statTodos.title = t('header.todos', { done: String(aggregate.todoDone), total: String(aggregate.todoTotal) })
+          }
+        }
+        if (statsBox !== null) {
+          statsBox.style.display = aggregate.stars !== null || aggregate.todos !== null ? '' : 'none'
         }
         header.classList.toggle('is-collapsed', descriptor.collapsed)
         header.classList.toggle('is-empty', descriptor.count === 0 && childCount === 0)
@@ -1097,7 +1236,20 @@ window.__ModuleLoader__.load({
         const subsCount = document.createElement('span')
         subsCount.dataset.dsbRole = 'subsCount'
         subs.appendChild(subsCount)
-        header.append(chevronButton, dot, name, count, pinBadge, subs, actionBar)
+        const stats = document.createElement('span')
+        stats.className = 'dsb-h__stats'
+        stats.dataset.dsbRole = 'stats'
+        stats.style.display = 'none'
+        const statStars = document.createElement('span')
+        statStars.className = 'dsb-h__stat'
+        statStars.dataset.dsbRole = 'statStars'
+        statStars.style.display = 'none'
+        const statTodos = document.createElement('span')
+        statTodos.className = 'dsb-h__stat'
+        statTodos.dataset.dsbRole = 'statTodos'
+        statTodos.style.display = 'none'
+        stats.append(statStars, statTodos)
+        header.append(chevronButton, dot, name, count, pinBadge, subs, stats, actionBar)
 
         chevronButton.addEventListener('click', (event) => {
           event.preventDefault()
@@ -1293,6 +1445,7 @@ window.__ModuleLoader__.load({
         ensureFlex(section)
         for (const entry of entries) clearRowBox(entry.unit)
         for (const node of section.querySelectorAll('[data-dsb-subtree-last]')) node.removeAttribute('data-dsb-subtree-last')
+        const aggregateStats = statsStore.getSnapshot()
 
         const topRows = []
         const ungroupedRows = []
@@ -1352,6 +1505,7 @@ window.__ModuleLoader__.load({
             pinnedCount: directMembers.filter((member) => directPins.has(member.sessionId)).length,
             childCount: children.length,
             depth: 0,
+            stats: computeBoxStats(state, box.id, aggregateStats),
           })
           let lastItem = header
           for (const [index, member] of directMembers.entries()) {
@@ -1378,6 +1532,7 @@ window.__ModuleLoader__.load({
               pinnedCount: childMembers.filter((member) => childPins.has(member.sessionId)).length,
               childCount: 0,
               depth: 1,
+              stats: computeBoxStats(state, child.id, aggregateStats),
             })
             setHidden(childHeader, box.collapsed)
             if (!box.collapsed) lastItem = childHeader
@@ -2292,6 +2447,8 @@ window.__ModuleLoader__.load({
       '.dsb-h__count{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:color-mix(in srgb, var(--dsb-color,#8B949E) 20%, transparent);color:var(--dsw-alias-label-secondary);font-size:10.5px;font-weight:500}',
       '.dsb-h__pin{flex:none;display:inline-flex;align-items:center;gap:2px;height:16px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:color-mix(in srgb, var(--dsb-color,#8B949E) 22%, transparent);color:var(--dsw-alias-label-secondary);font-size:10.5px;font-weight:500}',
       '.dsb-h__subs{flex:none;display:inline-flex;align-items:center;gap:2px;height:16px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:color-mix(in srgb, var(--dsb-color,#8B949E) 14%, transparent);color:var(--dsw-alias-label-tertiary);font-size:10.5px;font-weight:500}',
+      '.dsb-h__stats{flex:none;display:inline-flex;align-items:center;gap:6px;margin-left:2px;color:var(--dsw-alias-label-caption,var(--dsw-alias-label-tertiary,currentColor));font-size:10.5px;font-weight:500;line-height:16px;white-space:nowrap;pointer-events:none;user-select:none;font-variant-numeric:tabular-nums}',
+      '.dsb-h__stat{display:inline-flex;align-items:center;white-space:nowrap}',
       '.dsb-h__input{min-width:0;flex:1;height:20px;box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm,4px);background:var(--dsw-alias-button-elevated-fill,transparent);color:var(--dsw-alias-label-primary);font:inherit;font-weight:600;padding:0 4px;outline:none}',
       '.dsb-h__actions{flex:none;display:none;align-items:center;gap:2px}',
       '.dsb-h:hover .dsb-h__actions,.dsb-h:focus-within .dsb-h__actions{display:flex}',
@@ -2386,6 +2543,13 @@ window.__ModuleLoader__.load({
       COLORS,
       COLOR_HEX,
       dataStore,
+      statsStore,
+      computeBoxStats,
+      memberIdsForBox,
+      normalizeStars,
+      normalizeTodoDone,
+      refreshStats,
+      STATS_TIMEOUT_MS,
       dialogStore,
       openDialog,
       closeDialog,
@@ -2448,6 +2612,20 @@ window.__ModuleLoader__.load({
             window.clearInterval(retry)
           }
         }, 'session-boxes: data sync')
+
+        ctx.effect(() => {
+          const sync = () => {
+            if (document.visibilityState === 'hidden') return
+            void refreshStats()
+          }
+          window.addEventListener('focus', sync)
+          document.addEventListener('visibilitychange', sync)
+          void refreshStats()
+          return () => {
+            window.removeEventListener('focus', sync)
+            document.removeEventListener('visibilitychange', sync)
+          }
+        }, 'session-boxes: aggregate sync')
 
         const tRef = { current: ctx.locale.bind(NS) }
         resolveSessionTitle = (sessionId) => {

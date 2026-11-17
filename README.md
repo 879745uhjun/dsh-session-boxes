@@ -13,6 +13,7 @@ A session lives in exactly one box or sub-box at a time. Moving it elsewhere rem
 - **Boxes and one-level sub-boxes** — create, rename inline, recolor, reorder, delete; a parent delete promotes its sub-boxes to the top level. The parent frame runs continuously around its sub-boxes: sub-boxes are inset inside the same card instead of floating as separate cards.
 - **Single location** — choose one box or sub-box from the row menu; “Ungrouped” clears the location. The old location is replaced.
 - **Per-box pin** — pin a session to the top of one box or sub-box from that box's settings; it does not touch the native global pin. Pinned rows sort first, carry a colored pin badge in the box header, and use a stronger tint, a double colored spine, and a top accent instead of an extra row icon, so they stay recognizable without taking horizontal space. The row's “...” menu offers **Unpin inside <box>** so a pinned session can be released and reordered.
+- **Box aggregates** — each box header shows `★ 4.2` (average stars of its members) and `☑ 3/7` (completed / total todos) when `dsh-session-stars` and `dsh-session-todos` are installed. A parent box includes its sub-box members. Segments with no data are omitted; a 404, 1.5 s timeout, or bad JSON hides them and leaves the header unchanged. The routes are read-only same-origin GETs; the other plugins are never imported.
 - **Drag to reorder** — drag a box header onto another header at the same level to change the custom order. Sub-boxes reorder among their siblings; the manager and box settings also have up/down buttons.
 - **Drag sessions** — drag a session row onto a box header to move it there; drop it on **Ungrouped** to clear its location.
 - **Manager** — the box button in the workspace section header (beside search, view options, and add workspace) opens a manager for the whole tree: create top-level boxes, add a sub-box with `+`, rename/recolor/reorder/delete, and open a box's settings.
@@ -31,7 +32,7 @@ This package is a DSH bundle (`dsh.bundle.patch`). Install the directory with th
 
 ## Use
 
-- **Move a session**: open the row's `...` menu → **Move to session box…** → choose one box or sub-box (or Ungrouped). A new top-level box can be created from the same dialog.
+- **Move a session**: open the row's `...` menu → **Box settings** → **Move to session box…** → choose one box or sub-box (or Ungrouped). A new top-level box can be created from the same dialog.
 - **Manage the tree**: click the box button in the workspace section header. Use `+` on a top-level row to create a sub-box; “设置” opens name, color, parent, order, delete, members, and pin controls.
 - **Reorder boxes**: drag a box header onto another header at the same level, or use the manager's ↑/↓ buttons. In a box's settings, the parent selector moves a child between levels.
 - **Pin inside a box**: open the row's `...` menu → **Box settings** → **Pin inside <box>** (the item appears when the session is already in a box), or open the box's `⋯` settings and click the pin at the right of a member. The session moves to the top of that box only; the same submenu offers **Unpin inside <box>**.
@@ -64,8 +65,7 @@ This package is a DSH bundle (`dsh.bundle.patch`). Install the directory with th
 ## Development
 
 ```sh
-node test/host.test.mjs        # Host store, tree mutations, route, tool
-node test/client.dom.test.mjs  # grouping engine in Chromium (Playwright)
+npm test  # Host store/route/tool + grouping and aggregate badges in Chromium (Playwright)
 ```
 
 The Host test covers the durable store, one-level tree validation, promotion on delete, sibling moves, per-box pins, validation, the JSON route, the cross-origin fence, the agent tool, and persistence across remounts. The DOM test loads the real `client.js` with a stubbed Module Loader and a mock sidebar that mirrors the ui-workspace markup, including its hover-card wrapper.

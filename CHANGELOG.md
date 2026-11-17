@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+- Box headers show aggregate badges: average member stars (`★ 4.2`) from
+  `GET /session-stars`, and completed / total todos (`☑ 3/7`) from
+  `GET /session-todos`. A parent box includes its sub-box members.
+- Both segments hide independently when they have no data; a 404, 1.5 s timeout,
+  or bad JSON leaves the header unchanged. The routes are read-only same-origin
+  GETs; the other plugins are never imported.
+- Stats load on mount and refetch on window focus; membership and order changes
+  recompute from the cached snapshot. No polling and no SSE.
+- `npm test` now runs both the Host test and the Chromium DOM test.
+
 ## 0.4.10
 
 - The `session_boxes` agent tool now registers its `parameters` as a JSON Schema

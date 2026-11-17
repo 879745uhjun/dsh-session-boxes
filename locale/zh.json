@@ -31,6 +31,8 @@
   "header.expand": "展开",
   "header.drop": "拖到这里加入",
   "header.count": "{n} 个会话",
+  "header.stars": "成员平均星级 {stars}",
+  "header.todos": "成员待办完成度 {done}/{total}",
   "error.save": "保存失败，请重试",
   "error.load": "分组数据暂时不可用",
   "color.blue": "蓝色",
