@@ -17,7 +17,7 @@ A session lives in exactly one box or sub-box at a time. Moving it elsewhere rem
 - **Drag to reorder** — drag a box header onto another header at the same level to change the custom order. Sub-boxes reorder among their siblings; the manager and box settings also have up/down buttons.
 - **Drag sessions** — drag a session row onto a box header to move it there; drop it on **Ungrouped** to clear its location.
 - **Manager** — the box button in the workspace section header (beside search, view options, and add workspace) opens a manager for the whole tree: create top-level boxes, add a sub-box with `+`, rename/recolor/reorder/delete, and open a box's settings.
-- **Theme-aware controls** — buttons, inputs, and badges use the DSH theme tokens, so they stay readable in dark and light themes.
+- **Theme-aware controls and palette** — box colors use paired `--dshc-*` variables (`:root` for light, `body[data-ds-dark-theme]` for dark); headers, dots, and drop indicators use `var(--dsb-color, var(--dshc-gray))`. Dark headers raise the overlay mix (18%→24%, 45%→52%) while light keeps 18%/45%. Buttons, inputs, and badges use the DSH theme tokens.
 - **Durable** — boxes, sub-boxes, memberships, and per-box pins live in `~/.dsh/session-boxes.json` on the Host.
 - **Agent tool** — `session_boxes` can list, create (with `parentId`), rename, delete, move, assign, pin, unpin, and collapse boxes.
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.1
+
+- Move the box palette from JS hex constants to paired `--dshc-*` CSS variables:
+  light values on `:root`, dark values under `body[data-ds-dark-theme]`.
+  `COLORS` keeps names only; `COLOR_HEX` is gone.
+- Use `var(--dsb-color, var(--dshc-gray))` for headers, dots, swatches, and drop
+  indicators; remove hardcoded hex fallbacks from the stylesheet.
+- Raise the header overlay mix in dark mode (18%→24%, 45%→52%); light mode stays
+  18%/45%.
+- Add a static palette assertion (no bare hex outside the palette, all eight
+  light/dark pairs, no `prefers-color-scheme`) and a runtime light/dark check.
+
 ## 0.5.0
 
 - Box headers show aggregate badges: average member stars (`★ 4.2`) from

@@ -9,6 +9,7 @@
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 
 const requireFromPlaywright = createRequire('D:/Deepseek work/workplace/pw-test/')
@@ -16,6 +17,58 @@ const { chromium } = requireFromPlaywright('playwright-core')
 
 const here = dirname(fileURLToPath(import.meta.url))
 const clientPath = join(here, '..', 'client.js')
+
+function assertThemePalette() {
+  const source = readFileSync(clientPath, 'utf8')
+  const lines = source.split('\n')
+  const lightLine = lines.find((line) => line.includes(':root{--dshc-'))
+  const darkLine = lines.find((line) => line.includes('body[data-ds-dark-theme]{--dshc-'))
+  assert.ok(lightLine, 'light palette definition exists')
+  assert.ok(darkLine, 'dark palette definition exists')
+
+  const palette = new Set([lightLine, darkLine])
+  const rest = lines.filter((line) => !palette.has(line)).join('\n')
+  assert.equal(/#[0-9a-fA-F]{3,8}/.test(rest), false, 'no bare hex outside the palette definitions')
+
+  const light = {
+    blue: '#0969DA',
+    green: '#1A7F37',
+    amber: '#9A6700',
+    red: '#CF222E',
+    purple: '#8250DF',
+    cyan: '#1B7C83',
+    pink: '#BF3989',
+    gray: '#6E7781',
+  }
+  const dark = {
+    blue: '#4C8DFF',
+    green: '#3FB950',
+    amber: '#D29922',
+    red: '#F85149',
+    purple: '#A371F7',
+    cyan: '#39C5CF',
+    pink: '#DB61A2',
+    gray: '#8B949E',
+  }
+  for (const [color, value] of Object.entries(light)) {
+    assert.match(lightLine, new RegExp(`--dshc-${color}:${value}(?:;|})`), `light ${color}`)
+    assert.match(darkLine, new RegExp(`--dshc-${color}:${dark[color]}(?:;|})`), `dark ${color}`)
+  }
+  assert.equal((lightLine.match(/--dshc-/g) ?? []).length, 8)
+  assert.equal((darkLine.match(/--dshc-/g) ?? []).length, 8)
+  assert.match(lightLine, /--dsb-head-bg:18%/)
+  assert.match(lightLine, /--dsb-head-border:45%/)
+  assert.match(darkLine, /--dsb-head-bg:24%/)
+  assert.match(darkLine, /--dsb-head-border:52%/)
+  assert.equal(source.includes('prefers-color-scheme'), false, 'theme detection must use body[data-ds-dark-theme]')
+  assert.equal(source.includes('COLOR_HEX'), false, 'color hex map must be gone')
+  const colorsLine = lines.find((line) => line.includes('const COLORS ='))
+  assert.ok(colorsLine, 'COLORS declaration exists')
+  assert.equal(/#[0-9a-fA-F]/.test(colorsLine), false, 'COLORS keeps names only')
+  assert.ok(source.includes('var(--dsb-color, var(--dshc-gray))'))
+  console.log('client theme palette static test passed')
+}
+assertThemePalette()
 
 const PAGE_CSS = `
   body { margin: 0; font: 13px/18px sans-serif; background: #fff; color: #111; }
@@ -1164,6 +1217,42 @@ async function autoExpandScenario() {
   }
 }
 
+async function themePaletteScenario() {
+  const { browser, page } = await openPage(html([
+    section('w1', 'Workplace', [['s1', 'Alpha']], false),
+  ]))
+  try {
+    const result = await page.evaluate(() => {
+      const api = window.__DSH_SESSION_BOXES_TEST_API__
+      const style = document.createElement('style')
+      style.textContent = api.CSS
+      document.head.appendChild(style)
+      const probe = document.createElement('span')
+      probe.className = 'dsb-h'
+      probe.style.cssText = 'position:absolute;left:-9999px;top:0;width:100px;background:var(--dshc-blue);transition:none'
+      probe.style.setProperty('--dsb-color', 'var(--dshc-blue)')
+      document.body.appendChild(probe)
+      const read = () => ({
+        color: getComputedStyle(probe).backgroundColor,
+        header: getComputedStyle(probe).boxShadow,
+      })
+      const light = read()
+      document.body.setAttribute('data-ds-dark-theme', '')
+      const dark = read()
+      document.body.removeAttribute('data-ds-dark-theme')
+      probe.remove()
+      style.remove()
+      return { light, dark }
+    })
+    assert.equal(result.light.color, 'rgb(9, 105, 218)')
+    assert.equal(result.dark.color, 'rgb(76, 141, 255)')
+    assert.notEqual(result.light.header, result.dark.header)
+    console.log('client scenario 10 passed')
+  } finally {
+    await browser.close()
+  }
+}
+
 await firstScenario()
 await multiSectionScenario()
 await pinnedAndBlankScenario()
@@ -1173,4 +1262,5 @@ await pinAndDragScenario()
 await subfolderScenario()
 await aggregateStatsScenario()
 await autoExpandScenario()
+await themePaletteScenario()
 console.log('all client DOM tests passed')
