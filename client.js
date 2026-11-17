@@ -32,6 +32,72 @@ window.__ModuleLoader__.load({
       return `var(--dshc-${COLORS.includes(color) ? color : 'gray'})`
     }
 
+    const HEADER_KEYS = ['count', 'pinned', 'subs', 'stars', 'todos', 'add', 'menu']
+    const DEFAULT_HEADER = Object.freeze({
+      count: true,
+      pinned: true,
+      subs: true,
+      stars: true,
+      todos: true,
+      add: true,
+      menu: true,
+    })
+    const NEW_BOX_HEADER_KEY = 'dsh-session-boxes:new-box-header'
+
+    function normalizeHeader(value, base = DEFAULT_HEADER, fallback = DEFAULT_HEADER) {
+      const header = { ...base }
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        for (const key of HEADER_KEYS) {
+          if (typeof value[key] === 'boolean') header[key] = value[key]
+          else if (Object.hasOwn(value, key)) header[key] = fallback[key]
+        }
+      }
+      return header
+    }
+
+    function effectiveHeader(value) {
+      const header = normalizeHeader(value)
+      if (!HEADER_KEYS.some((key) => header[key])) header.menu = true
+      return header
+    }
+
+    function compactHeader() {
+      return {
+        count: true,
+        pinned: false,
+        subs: false,
+        stars: false,
+        todos: false,
+        add: false,
+        menu: true,
+      }
+    }
+
+    function loadNewBoxHeader() {
+      try {
+        const raw = window.localStorage.getItem(NEW_BOX_HEADER_KEY)
+        if (raw !== null) return normalizeHeader(JSON.parse(raw))
+      } catch {
+        /* private mode or malformed storage */
+      }
+      return { ...DEFAULT_HEADER }
+    }
+
+    let newBoxHeader = loadNewBoxHeader()
+
+    function readNewBoxHeader() {
+      return normalizeHeader(newBoxHeader)
+    }
+
+    function writeNewBoxHeader(value) {
+      newBoxHeader = normalizeHeader(value)
+      try {
+        window.localStorage.setItem(NEW_BOX_HEADER_KEY, JSON.stringify(newBoxHeader))
+      } catch {
+        /* private mode: keep the in-memory default */
+      }
+    }
+
     const SESSION_PREFIX = 'session:'
     const WORKSPACE_PREFIX = 'workspace:'
     const OVERFLOW_PREFIX = 'overflow:'
@@ -46,6 +112,8 @@ window.__ModuleLoader__.load({
       'dialog.box.title': '箱子设置',
       'dialog.box.name': '名称',
       'dialog.box.color': '颜色',
+      'dialog.box.header': '标题栏显示',
+      'dialog.box.compact': '紧凑模式',
       'dialog.box.order': '顺序',
       'dialog.box.up': '上移',
       'dialog.box.down': '下移',
@@ -73,6 +141,8 @@ window.__ModuleLoader__.load({
       'manager.settings': '设置',
       'manager.count': '{n} 个会话',
       'manager.create': '新建箱子',
+      'manager.headerDefault': '新建箱子默认标题栏',
+      'manager.applyAll': '应用到全部箱子',
       'manager.newSub': '新建子箱子',
       'manager.childCount': '{n} 个子箱子',
       'dialog.close': '关闭',
@@ -85,6 +155,13 @@ window.__ModuleLoader__.load({
       'header.drop': '拖到这里加入',
       'header.count': '{n} 个会话',
       'header.pinned': '{n} 个置顶',
+      'header.option.count': '会话数',
+      'header.option.pinned': '置顶数',
+      'header.option.subs': '子盒数',
+      'header.option.stars': '平均星级',
+      'header.option.todos': '待办完成度',
+      'header.option.add': '新建子盒',
+      'header.option.menu': '盒子菜单',
       'header.stars': '成员平均星级 {stars}',
       'header.todos': '成员待办完成度 {done}/{total}',
       'header.subs': '{n} 个子箱子',
@@ -116,6 +193,8 @@ window.__ModuleLoader__.load({
       'dialog.box.title': 'Box settings',
       'dialog.box.name': 'Name',
       'dialog.box.color': 'Color',
+      'dialog.box.header': 'Header items',
+      'dialog.box.compact': 'Compact mode',
       'dialog.box.order': 'Order',
       'dialog.box.up': 'Move up',
       'dialog.box.down': 'Move down',
@@ -143,6 +222,8 @@ window.__ModuleLoader__.load({
       'manager.settings': 'Settings',
       'manager.count': '{n} sessions',
       'manager.create': 'New box',
+      'manager.headerDefault': 'Default header for new boxes',
+      'manager.applyAll': 'Apply to all boxes',
       'manager.newSub': 'New sub-box',
       'manager.childCount': '{n} sub-boxes',
       'dialog.close': 'Close',
@@ -155,6 +236,13 @@ window.__ModuleLoader__.load({
       'header.drop': 'Drop here to add',
       'header.count': '{n} sessions',
       'header.pinned': '{n} pinned',
+      'header.option.count': 'Count',
+      'header.option.pinned': 'Pinned',
+      'header.option.subs': 'Sub-boxes',
+      'header.option.stars': 'Stars',
+      'header.option.todos': 'Todos',
+      'header.option.add': 'Add sub-box',
+      'header.option.menu': 'Menu',
       'header.stars': 'Average member stars {stars}',
       'header.todos': 'Member todo completion {done}/{total}',
       'header.subs': '{n} sub-boxes',
@@ -246,6 +334,7 @@ window.__ModuleLoader__.load({
           collapsed: entry.collapsed === true,
           parentId: typeof entry.parentId === 'string' ? entry.parentId : null,
           order: Number.isFinite(Number(entry.order)) ? Number(entry.order) : boxes.length,
+          header: normalizeHeader(entry.header),
         })
       }
       boxes.sort((left, right) => left.order - right.order)
@@ -575,13 +664,18 @@ window.__ModuleLoader__.load({
       return setBoxPin(boxId, sessionId, false)
     }
 
-    async function createBox(name, color = 'blue', parentId = null) {
-      const result = await commit('create', { name, color, parentId }, null)
+    async function createBox(name, color = 'blue', parentId = null, header = readNewBoxHeader()) {
+      const result = await commit('create', { name, color, parentId, header }, null)
       return result
     }
 
     function updateBox(boxId, patch) {
-      const boxes = resequenceTree(dataStore.getSnapshot().boxes.map((box) => (box.id === boxId ? { ...box, ...patch } : { ...box })))
+      const boxes = resequenceTree(dataStore.getSnapshot().boxes.map((box) => {
+        if (box.id !== boxId) return { ...box }
+        const next = { ...box, ...patch }
+        if (patch.header !== undefined) next.header = normalizeHeader(patch.header, box.header, DEFAULT_HEADER)
+        return next
+      }))
       return commit('update', { boxId, ...patch }, (state) => ({ ...state, boxes }))
     }
 
@@ -1177,12 +1271,16 @@ window.__ModuleLoader__.load({
       }
 
       function ensureBoxHeader(section, box, depth) {
+        const config = effectiveHeader(box.header)
+        const signature = HEADER_KEYS.map((key) => (config[key] ? '1' : '0')).join('')
         let header = headerFor(section, box.id)
-        if (header !== null) return header
+        if (header !== null && header.dataset.dsbHeaderConfig === signature) return header
+        if (header !== null) header.remove()
         header = document.createElement('div')
         header.className = depth > 0 ? 'dsb-h dsb-h--sub' : 'dsb-h'
         header.dataset.dsbBox = box.id
         header.dataset.dsbDepth = String(depth)
+        header.dataset.dsbHeaderConfig = signature
         header.setAttribute('role', 'presentation')
 
         const chevronButton = document.createElement('button')
@@ -1197,53 +1295,86 @@ window.__ModuleLoader__.load({
         name.className = 'dsb-h__name'
         name.dataset.dsbRole = 'name'
         name.title = box.name
-        const count = document.createElement('span')
-        count.className = 'dsb-h__count'
-        count.dataset.dsbRole = 'count'
+        const children = [chevronButton, dot, name]
 
-        const actionBar = document.createElement('span')
-        actionBar.className = 'dsb-h__actions'
-        const add = document.createElement('button')
-        add.type = 'button'
-        add.className = 'dsb-h__action'
-        add.dataset.dsbRole = 'add'
-        add.textContent = '+'
-        const more = document.createElement('button')
-        more.type = 'button'
-        more.className = 'dsb-h__action'
-        more.dataset.dsbRole = 'more'
-        more.textContent = '⋯'
-        actionBar.append(add, more)
-        const pinBadge = document.createElement('span')
-        pinBadge.className = 'dsb-h__pin'
-        pinBadge.dataset.dsbRole = 'pin'
-        pinBadge.style.display = 'none'
-        pinBadge.appendChild(pinIcon())
-        const pinCount = document.createElement('span')
-        pinCount.dataset.dsbRole = 'pinCount'
-        pinBadge.appendChild(pinCount)
-        const subs = document.createElement('span')
-        subs.className = 'dsb-h__subs'
-        subs.dataset.dsbRole = 'subs'
-        subs.style.display = 'none'
-        subs.appendChild(folderIcon())
-        const subsCount = document.createElement('span')
-        subsCount.dataset.dsbRole = 'subsCount'
-        subs.appendChild(subsCount)
-        const stats = document.createElement('span')
-        stats.className = 'dsb-h__stats'
-        stats.dataset.dsbRole = 'stats'
-        stats.style.display = 'none'
-        const statStars = document.createElement('span')
-        statStars.className = 'dsb-h__stat'
-        statStars.dataset.dsbRole = 'statStars'
-        statStars.style.display = 'none'
-        const statTodos = document.createElement('span')
-        statTodos.className = 'dsb-h__stat'
-        statTodos.dataset.dsbRole = 'statTodos'
-        statTodos.style.display = 'none'
-        stats.append(statStars, statTodos)
-        header.append(chevronButton, dot, name, count, pinBadge, subs, stats, actionBar)
+        if (config.count) {
+          const count = document.createElement('span')
+          count.className = 'dsb-h__count'
+          count.dataset.dsbRole = 'count'
+          children.push(count)
+        }
+
+        if (config.pinned) {
+          const pinBadge = document.createElement('span')
+          pinBadge.className = 'dsb-h__pin'
+          pinBadge.dataset.dsbRole = 'pin'
+          pinBadge.style.display = 'none'
+          pinBadge.appendChild(pinIcon())
+          const pinCount = document.createElement('span')
+          pinCount.dataset.dsbRole = 'pinCount'
+          pinBadge.appendChild(pinCount)
+          children.push(pinBadge)
+        }
+
+        if (config.subs) {
+          const subs = document.createElement('span')
+          subs.className = 'dsb-h__subs'
+          subs.dataset.dsbRole = 'subs'
+          subs.style.display = 'none'
+          subs.appendChild(folderIcon())
+          const subsCount = document.createElement('span')
+          subsCount.dataset.dsbRole = 'subsCount'
+          subs.appendChild(subsCount)
+          children.push(subs)
+        }
+
+        if (config.stars || config.todos) {
+          const stats = document.createElement('span')
+          stats.className = 'dsb-h__stats'
+          stats.dataset.dsbRole = 'stats'
+          stats.style.display = 'none'
+          if (config.stars) {
+            const statStars = document.createElement('span')
+            statStars.className = 'dsb-h__stat'
+            statStars.dataset.dsbRole = 'statStars'
+            statStars.style.display = 'none'
+            stats.appendChild(statStars)
+          }
+          if (config.todos) {
+            const statTodos = document.createElement('span')
+            statTodos.className = 'dsb-h__stat'
+            statTodos.dataset.dsbRole = 'statTodos'
+            statTodos.style.display = 'none'
+            stats.appendChild(statTodos)
+          }
+          children.push(stats)
+        }
+
+        let actionBar = null
+        let add = null
+        let more = null
+        if (config.add || config.menu) {
+          actionBar = document.createElement('span')
+          actionBar.className = 'dsb-h__actions'
+          if (config.add) {
+            add = document.createElement('button')
+            add.type = 'button'
+            add.className = 'dsb-h__action'
+            add.dataset.dsbRole = 'add'
+            add.textContent = '+'
+            actionBar.appendChild(add)
+          }
+          if (config.menu) {
+            more = document.createElement('button')
+            more.type = 'button'
+            more.className = 'dsb-h__action'
+            more.dataset.dsbRole = 'more'
+            more.textContent = '⋯'
+            actionBar.appendChild(more)
+          }
+          children.push(actionBar)
+        }
+        header.append(...children)
 
         chevronButton.addEventListener('click', (event) => {
           event.preventDefault()
@@ -1251,16 +1382,20 @@ window.__ModuleLoader__.load({
           toggleBox(box.id)
         })
         bindBoxName(header, box.id, name)
-        add.addEventListener('click', (event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          openBoxDialog(box.id, collectSessions(section))
-        })
-        more.addEventListener('click', (event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          openBoxDialog(box.id, collectSessions(section))
-        })
+        if (add !== null) {
+          add.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            openBoxDialog(box.id, collectSessions(section))
+          })
+        }
+        if (more !== null) {
+          more.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            openBoxDialog(box.id, collectSessions(section))
+          })
+        }
         bindDrop(header, box.id)
         bindBoxDrag(header, box.id)
         section.appendChild(header)
@@ -1812,6 +1947,38 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function HeaderConfig({ value, t, onChange, extra = null }) {
+      const header = effectiveHeader(value)
+      return h(
+        'div',
+        { className: 'dsb-header-config' },
+        h(
+          'div',
+          { className: 'dsb-header-config__grid' },
+          HEADER_KEYS.map((key) => h(
+            'label',
+            { key, className: 'dsb-header-option' },
+            h('input', {
+              type: 'checkbox',
+              checked: header[key],
+              onChange: (event) => onChange({ ...header, [key]: event.target.checked }),
+            }),
+            h('span', { children: t(`header.option.${key}`) }),
+          )),
+        ),
+        h(
+          'div',
+          { className: 'dsb-header-config__actions' },
+          h('button', {
+            type: 'button',
+            className: 'dsb-button',
+            onClick: () => onChange(compactHeader()),
+          }, t('dialog.box.compact')),
+          extra,
+        ),
+      )
+    }
+
     function Modal({ title, onClose, children, wide, t }) {
       useEffect(() => {
         const onKeyDown = (event) => {
@@ -2025,6 +2192,18 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'dsb-field' },
+          h('span', { className: 'dsb-field__label', children: t('dialog.box.header') }),
+          h(HeaderConfig, {
+            value: box.header,
+            t,
+            onChange: (next) => {
+              void updateBox(box.id, { header: next })
+            },
+          }),
+        ),
+        h(
+          'div',
+          { className: 'dsb-field' },
           h('span', { className: 'dsb-field__label', children: t('dialog.box.parent') }),
           h(
             'select',
@@ -2160,7 +2339,7 @@ window.__ModuleLoader__.load({
         const value = name.trim()
         if (value.length === 0 || busy) return
         setBusy(true)
-        const result = await createBox(value, color, parentId)
+        const result = await createBox(value, color, parentId, readNewBoxHeader())
         setBusy(false)
         if (result.ok) closeDialog()
       }
@@ -2240,11 +2419,25 @@ window.__ModuleLoader__.load({
       const [color, setColor] = useState('blue')
       const [busy, setBusy] = useState(false)
       const [confirmId, setConfirmId] = useState(null)
+      const [defaultHeader, setDefaultHeader] = useState(readNewBoxHeader())
+      const changeDefault = (next) => {
+        const normalized = normalizeHeader(next)
+        setDefaultHeader(normalized)
+        writeNewBoxHeader(normalized)
+      }
+      const applyAll = async () => {
+        if (busy) return
+        setBusy(true)
+        for (const box of state.boxes) {
+          await updateBox(box.id, { header: defaultHeader })
+        }
+        setBusy(false)
+      }
       const create = async () => {
         const value = name.trim()
         if (value.length === 0 || busy) return
         setBusy(true)
-        const result = await createBox(value, color)
+        const result = await createBox(value, color, null, defaultHeader)
         setBusy(false)
         if (result.ok) setName('')
       }
@@ -2293,6 +2486,24 @@ window.__ModuleLoader__.load({
               void create()
             },
           }, t('manager.create')),
+        ),
+        h(
+          'div',
+          { className: 'dsb-field' },
+          h('span', { className: 'dsb-field__label', children: t('manager.headerDefault') }),
+          h(HeaderConfig, {
+            value: defaultHeader,
+            t,
+            onChange: changeDefault,
+            extra: h('button', {
+              type: 'button',
+              className: 'dsb-button',
+              disabled: busy || state.boxes.length === 0,
+              onClick: () => {
+                void applyAll()
+              },
+            }, t('manager.applyAll')),
+          }),
         ),
         state.boxes.length === 0
           ? h('p', { className: 'dsb-empty', children: t('manager.empty') })
@@ -2520,6 +2731,12 @@ window.__ModuleLoader__.load({
       '.dsb-field{display:flex;flex-direction:column;gap:4px}',
       '.dsb-field--row{flex-direction:row;align-items:center;justify-content:space-between;gap:8px}',
       '.dsb-field__label{font-size:12px;color:var(--dsw-alias-label-secondary)}',
+      '.dsb-header-config{display:flex;flex-direction:column;gap:8px;padding:8px;border:.5px solid var(--dsw-alias-border-l2, color-mix(in srgb, CanvasText 25%, transparent));border-radius:var(--dsw-radius-sm,6px);background:var(--dsw-alias-bg-layer-1, transparent)}',
+      '.dsb-header-config__grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 8px}',
+      '.dsb-header-option{display:flex;align-items:center;gap:5px;min-width:0;font-size:12px;color:var(--dsw-alias-label-secondary);cursor:pointer}',
+      '.dsb-header-option input{flex:none;margin:0;accent-color:var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary, var(--dshc-blue)))}',
+      '.dsb-header-option span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.dsb-header-config__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
       '.dsb-swatches{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
       '.dsb-swatch{width:18px;height:18px;padding:0;border:0;border-radius:50%;cursor:pointer;box-shadow:inset 0 0 0 1px color-mix(in srgb, Canvas 18%, transparent)}',
       '.dsb-swatch.is-on{box-shadow:0 0 0 2px var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1, Canvas)),0 0 0 3.5px var(--dsw-alias-label-primary, CanvasText)}',
@@ -2537,6 +2754,13 @@ window.__ModuleLoader__.load({
       createDomEngine,
       normalizeState,
       COLORS,
+      HEADER_KEYS,
+      DEFAULT_HEADER,
+      normalizeHeader,
+      effectiveHeader,
+      compactHeader,
+      readNewBoxHeader,
+      writeNewBoxHeader,
       dataStore,
       statsStore,
       computeBoxStats,

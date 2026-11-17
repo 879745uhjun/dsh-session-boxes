@@ -7,6 +7,8 @@
   "dialog.box.title": "Box settings",
   "dialog.box.name": "Name",
   "dialog.box.color": "Color",
+  "dialog.box.header": "Header items",
+  "dialog.box.compact": "Compact mode",
   "dialog.box.order": "Order",
   "dialog.box.up": "Move up",
   "dialog.box.down": "Move down",
@@ -42,5 +44,14 @@
   "color.purple": "Purple",
   "color.pink": "Pink",
   "color.cyan": "Cyan",
-  "color.gray": "Gray"
+  "color.gray": "Gray",
+  "manager.headerDefault": "Default header for new boxes",
+  "manager.applyAll": "Apply to all boxes",
+  "header.option.count": "Count",
+  "header.option.pinned": "Pinned",
+  "header.option.subs": "Sub-boxes",
+  "header.option.stars": "Stars",
+  "header.option.todos": "Todos",
+  "header.option.add": "Add sub-box",
+  "header.option.menu": "Menu"
 }

@@ -38,7 +38,29 @@ const MAX_MEMBERSHIPS = 100
 /** Palette ids the browser half knows how to paint. */
 const COLORS = ['blue', 'green', 'amber', 'red', 'purple', 'pink', 'cyan', 'gray']
 const COLOR_SET = new Set(COLORS)
+const HEADER_KEYS = ['count', 'pinned', 'subs', 'stars', 'todos', 'add', 'menu']
+const DEFAULT_HEADER = Object.freeze({
+  count: true,
+  pinned: true,
+  subs: true,
+  stars: true,
+  todos: true,
+  add: true,
+  menu: true,
+})
 const BOX_ID_PATTERN = /^b_[a-z0-9]{6,32}$/
+
+/** Copy a header config, filling missing or invalid keys from the base. */
+function readHeader(value, base = DEFAULT_HEADER, fallback = DEFAULT_HEADER) {
+  const header = { ...base }
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    for (const key of HEADER_KEYS) {
+      if (typeof value[key] === 'boolean') header[key] = value[key]
+      else if (Object.hasOwn(value, key)) header[key] = fallback[key]
+    }
+  }
+  return header
+}
 
 /** One warning sink that reports each distinct failure once. */
 function createLogger() {
@@ -96,6 +118,7 @@ function normalizeState(raw) {
       collapsed: entry.collapsed === true,
       parentId: typeof entry.parentId === 'string' ? entry.parentId : null,
       order: Number.isFinite(Number(entry.order)) ? Math.floor(Number(entry.order)) : boxes.length,
+      header: readHeader(entry.header),
     })
   }
   const byId = new Map(boxes.map((box) => [box.id, box]))
@@ -154,7 +177,7 @@ function cloneState(state) {
   const pins = {}
   for (const [boxId, sessionIds] of Object.entries(state.pins ?? {})) pins[boxId] = [...sessionIds]
   return {
-    boxes: state.boxes.map((box) => ({ ...box })),
+    boxes: state.boxes.map((box) => ({ ...box, header: readHeader(box.header) })),
     memberships,
     pins,
     ungroupedCollapsed: state.ungroupedCollapsed,
@@ -240,6 +263,7 @@ function applyMutation(current, action, payload) {
       collapsed: false,
       parentId: parent.parentId,
       order: state.boxes.length,
+      header: readHeader(body.header),
     }
     state.boxes.push(box)
     state.boxes = resequenceTree(state.boxes)
@@ -263,6 +287,9 @@ function applyMutation(current, action, payload) {
     if (body.collapsed !== undefined) {
       if (typeof body.collapsed !== 'boolean') return { ok: false, error: 'collapsed must be a boolean' }
       box.collapsed = body.collapsed
+    }
+    if (body.header !== undefined) {
+      box.header = readHeader(body.header, box.header, DEFAULT_HEADER)
     }
     if (body.parentId !== undefined) {
       const parent = readParentId(body.parentId, state)
@@ -432,6 +459,7 @@ function boxRows(state) {
     collapsed: box.collapsed,
     parentId: box.parentId ?? null,
     depth: box.parentId === null || box.parentId === undefined ? 0 : 1,
+    header: readHeader(box.header),
     childCount: state.boxes.filter((child) => child.parentId === box.id).length,
     count: Object.values(state.memberships).filter((boxIds) => boxIds.includes(box.id)).length,
     pinnedCount: (state.pins[box.id] ?? []).length,
@@ -595,7 +623,7 @@ function createRouteHandler(store, log) {
 function createTool(store) {
   return {
     name: 'session_boxes',
-    description: 'Read or change the user\'s custom session boxes in the workspace sidebar. Boxes classify sessions without moving them between workspaces; one session may sit in several boxes. Use action "list" to read boxes, memberships, and per-box pins; "create" to add a box; "rename"/"update" to edit it; "delete" to remove it; "move" to reorder; "assign" to set a session\'s boxes; "unassign" to remove one box; "clear" to empty a session; "pin"/"unpin" to pin a session to the top of one box without touching the native global pin; and "collapse" to fold or unfold a box.',
+    description: 'Read or change the user\'s custom session boxes in the workspace sidebar. Boxes classify sessions without moving them between workspaces; one session may sit in several boxes. Use action "list" to read boxes, memberships, and per-box pins; "create" to add a box; "rename"/"update" to edit it (including the optional header visibility object); "delete" to remove it; "move" to reorder; "assign" to set a session\'s boxes; "unassign" to remove one box; "clear" to empty a session; "pin"/"unpin" to pin a session to the top of one box without touching the native global pin; and "collapse" to fold or unfold a box.',
     parameters: {
       type: 'object',
       properties: {
@@ -612,6 +640,19 @@ function createTool(store) {
         boxIds: { type: 'array', items: { type: 'string' }, description: 'Complete box id list for assign.' },
         toIndex: { type: 'number', description: 'Zero-based destination for move.' },
         collapsed: { type: 'boolean', description: 'Folded state for collapse.' },
+        header: {
+          type: 'object',
+          description: 'Optional per-box header visibility. Omitted keys keep their current value; a missing header means all items are shown.',
+          properties: {
+            count: { type: 'boolean', description: 'Show the session count badge.' },
+            pinned: { type: 'boolean', description: 'Show the per-box pinned count.' },
+            subs: { type: 'boolean', description: 'Show the sub-box count.' },
+            stars: { type: 'boolean', description: 'Show the average member stars.' },
+            todos: { type: 'boolean', description: 'Show the completed / total todos.' },
+            add: { type: 'boolean', description: 'Show the add-sub-box button.' },
+            menu: { type: 'boolean', description: 'Show the box menu button.' },
+          },
+        },
       },
       required: ['action'],
     },
@@ -652,7 +693,7 @@ function createTool(store) {
           : { ok: false, error: result.error }
       }
       if (action === 'create') {
-        const result = await store.mutate('create', { name: args?.name, color: args?.color, parentId: args?.parentId })
+        const result = await store.mutate('create', { name: args?.name, color: args?.color, parentId: args?.parentId, header: args?.header })
         return result.ok
           ? { ok: true, action, boxId: result.boxId, boxes: boxRows(result.state) }
           : { ok: false, error: result.error }
@@ -664,7 +705,7 @@ function createTool(store) {
           : { ok: false, error: result.error }
       }
       if (action === 'update') {
-        const result = await store.mutate('update', { boxId: args?.boxId, name: args?.name, color: args?.color, parentId: args?.parentId })
+        const result = await store.mutate('update', { boxId: args?.boxId, name: args?.name, color: args?.color, parentId: args?.parentId, header: args?.header })
         return result.ok
           ? { ok: true, action, boxes: boxRows(result.state) }
           : { ok: false, error: result.error }

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0
+
+- Per-box `header` config: count, pinned, subs, stars, todos, add, and menu can be
+  hidden independently; the chevron is always kept and hidden items are not
+  rendered at all. Missing fields mean all items (old data needs no migration);
+  invalid values fall back to the default.
+- Box settings has seven checkboxes and a **Compact mode** button (chevron + count
+  + menu). The manager stores a default for new boxes and can apply it to all
+  boxes; new boxes use the saved default.
+- The `session_boxes` tool accepts and returns `header`, and its schema exposes
+  the seven boolean fields.
+- Host and DOM tests cover defaults, hidden/no-placeholder, compact/all-off, old
+  data, invalid values, collapsed headers, and persistence.
+
 ## 0.5.1
 
 - Move the box palette from JS hex constants to paired `--dshc-*` CSS variables:

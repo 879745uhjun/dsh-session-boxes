@@ -14,12 +14,13 @@ A session lives in exactly one box or sub-box at a time. Moving it elsewhere rem
 - **Single location** — choose one box or sub-box from the row menu; “Ungrouped” clears the location. The old location is replaced.
 - **Per-box pin** — pin a session to the top of one box or sub-box from that box's settings; it does not touch the native global pin. Pinned rows sort first, carry a colored pin badge in the box header, and use a stronger tint, a double colored spine, and a top accent instead of an extra row icon, so they stay recognizable without taking horizontal space. The row's “...” menu offers **Unpin inside <box>** so a pinned session can be released and reordered.
 - **Box aggregates** — each box header shows `★ 4.2` (average stars of its members) and `☑ 3/7` (completed / total todos) when `dsh-session-stars` and `dsh-session-todos` are installed. A parent box includes its sub-box members. Segments with no data are omitted; a 404, 1.5 s timeout, or bad JSON hides them and leaves the header unchanged. The routes are read-only same-origin GETs; the other plugins are never imported.
+- **Configurable box headers** — each box chooses which of `count`, `pinned`, `subs`, `stars`, `todos`, `add`, and `menu` appear; the chevron is always kept. **Compact mode** keeps only chevron + count + menu. The manager stores a default for new boxes and can apply it to every box. A missing `header` means all items (old data needs no migration); invalid values fall back to the default.
 - **Drag to reorder** — drag a box header onto another header at the same level to change the custom order. Sub-boxes reorder among their siblings; the manager and box settings also have up/down buttons.
 - **Drag sessions** — drag a session row onto a box header to move it there; drop it on **Ungrouped** to clear its location.
 - **Manager** — the box button in the workspace section header (beside search, view options, and add workspace) opens a manager for the whole tree: create top-level boxes, add a sub-box with `+`, rename/recolor/reorder/delete, and open a box's settings.
 - **Theme-aware controls and palette** — box colors use paired `--dshc-*` variables (`:root` for light, `body[data-ds-dark-theme]` for dark); headers, dots, and drop indicators use `var(--dsb-color, var(--dshc-gray))`. Dark headers raise the overlay mix (18%→24%, 45%→52%) while light keeps 18%/45%. Buttons, inputs, and badges use the DSH theme tokens.
 - **Durable** — boxes, sub-boxes, memberships, and per-box pins live in `~/.dsh/session-boxes.json` on the Host.
-- **Agent tool** — `session_boxes` can list, create (with `parentId`), rename, delete, move, assign, pin, unpin, and collapse boxes.
+- **Agent tool** — `session_boxes` can list, create (with `parentId`), rename, delete, move, assign, pin, unpin, collapse, and read/write each box's `header` visibility.
 
 Blank **New Session** rows, and pinned sessions that have no box, stay on top. A pinned session that belongs to a box is shown inside that box and sorts first, keeping its native pin marker. The native “Show more” watermark expands automatically while boxes are in use; choosing “Show less” yourself is respected.
 
@@ -54,7 +55,7 @@ This package is a DSH bundle (`dsh.bundle.patch`). Install the directory with th
   "version": 1,
   "boxes": [
     { "id": "b_ab12cd34ef", "name": "前端", "color": "blue", "collapsed": false, "parentId": null, "order": 0 },
-    { "id": "b_ff00aa11bb", "name": "组件", "color": "green", "collapsed": false, "parentId": "b_ab12cd34ef", "order": 1 }
+    { "id": "b_ff00aa11bb", "name": "组件", "color": "green", "collapsed": false, "parentId": "b_ab12cd34ef", "order": 1, "header": { "count": true, "pinned": true, "subs": true, "stars": false, "todos": false, "add": true, "menu": true } }
   ],
   "memberships": { "session-…": ["b_ff00aa11bb"] },
   "pins": { "b_ff00aa11bb": ["session-…"] },

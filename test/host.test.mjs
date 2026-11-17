@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
@@ -97,6 +97,13 @@ async function main() {
     assert.equal(tool.parameters.type, 'object')
     assert.equal(typeof tool.parameters.properties, 'object')
     assert.ok(tool.parameters.properties.action, 'action property exists')
+    assert.deepEqual(Object.keys(tool.parameters.properties).sort(), [
+      'action', 'boxId', 'boxIds', 'collapsed', 'color', 'header', 'name', 'parentId', 'sessionId', 'toIndex',
+    ])
+    assert.equal(tool.parameters.properties.header.type, 'object')
+    assert.deepEqual(Object.keys(tool.parameters.properties.header.properties).sort(), [
+      'add', 'count', 'menu', 'pinned', 'stars', 'subs', 'todos',
+    ])
     assert.deepEqual(tool.parameters.required, ['action'])
     assert.equal(tool.parameters.action, undefined)
     for (const [property, schema] of Object.entries(tool.parameters.properties)) {
@@ -115,6 +122,18 @@ async function main() {
     assert.equal(front.color, 'green')
     assert.equal(front.order, 0)
     assert.equal(front.collapsed, false)
+    assert.deepEqual(front.header, { count: true, pinned: true, subs: true, stars: true, todos: true, add: true, menu: true })
+
+    result = await post(route, { action: 'update', boxId: front.id, header: { count: false, stars: false, menu: false } })
+    assert.equal(result.status, 200)
+    const headerBox = result.json.state.boxes.find((box) => box.id === front.id)
+    assert.deepEqual(headerBox.header, { count: false, pinned: true, subs: true, stars: false, todos: true, add: true, menu: false })
+
+    result = await post(route, { action: 'update', boxId: front.id, header: { count: 'no', pinned: 0, subs: false, stars: null, todos: true, add: 1, menu: false } })
+    assert.equal(result.status, 200)
+    assert.deepEqual(result.json.state.boxes.find((box) => box.id === front.id).header, {
+      count: true, pinned: true, subs: false, stars: true, todos: true, add: true, menu: false,
+    })
 
     result = await post(route, { action: 'create', name: '学习' })
     assert.equal(result.status, 200)
@@ -209,6 +228,22 @@ async function main() {
     const toolBox = toolResult.boxes.find((box) => box.name === '工具箱')
     assert.ok(toolBox)
 
+    toolResult = await tool.execute({ action: 'create', name: '标题箱', header: { stars: false, todos: false } })
+    assert.equal(toolResult.ok, true)
+    const headerToolBox = toolResult.boxes.find((box) => box.name === '标题箱')
+    assert.deepEqual(headerToolBox.header, { count: true, pinned: true, subs: true, stars: false, todos: false, add: true, menu: true })
+
+    toolResult = await tool.execute({ action: 'update', boxId: headerToolBox.boxId, header: { count: false, menu: false } })
+    assert.equal(toolResult.ok, true)
+    assert.deepEqual(toolResult.boxes.find((box) => box.boxId === headerToolBox.boxId).header, {
+      count: false, pinned: true, subs: true, stars: false, todos: false, add: true, menu: false,
+    })
+
+    toolResult = await tool.execute({ action: 'list' })
+    assert.deepEqual(toolResult.boxes.find((box) => box.boxId === headerToolBox.boxId).header, {
+      count: false, pinned: true, subs: true, stars: false, todos: false, add: true, menu: false,
+    })
+
     toolResult = await tool.execute({ action: 'assign', sessionId: 'session-ccc', boxIds: [toolBox.boxId] })
     assert.equal(toolResult.ok, true)
     assert.deepEqual(toolResult.boxes.find((box) => box.boxId === toolBox.boxId).count, 1)
@@ -247,6 +282,9 @@ async function main() {
     const stored = JSON.parse(await readFile(join(home, 'session-boxes.json'), 'utf8'))
     assert.equal(stored.version, 1)
     assert.ok(Array.isArray(stored.boxes))
+    assert.deepEqual(stored.boxes.find((box) => box.id === front.id).header, {
+      count: true, pinned: true, subs: false, stars: true, todos: true, add: true, menu: false,
+    })
     assert.deepEqual(stored.pins[front.id], ['session-aaa'])
     first.dispose()
 
@@ -255,7 +293,7 @@ async function main() {
     result = await call(second.state.routes[0], 'GET')
     assert.equal(result.status, 200)
     assert.equal(result.json.state.ungroupedCollapsed, true)
-    assert.equal(result.json.state.boxes.length, 2)
+    assert.equal(result.json.state.boxes.length, 3)
     assert.ok(result.json.state.boxes.some((box) => box.name === '前端开发'))
     assert.deepEqual(result.json.state.pins[front.id], ['session-aaa'])
     second.dispose()
@@ -304,6 +342,42 @@ async function main() {
       tree.dispose()
     } finally {
       await rm(treeHome, { recursive: true, force: true })
+    }
+
+    // Legacy boxes without a header field default to all items; invalid values fall back per key.
+    const legacyHome = await mkdtemp(join(tmpdir(), 'dsh-session-boxes-legacy-'))
+    try {
+      await writeFile(join(legacyHome, 'session-boxes.json'), JSON.stringify({
+        version: 1,
+        boxes: [
+          { id: 'b_oldbox', name: 'Old', color: 'blue', collapsed: false, parentId: null, order: 0 },
+          {
+            id: 'b_badbox',
+            name: 'Bad',
+            color: 'green',
+            collapsed: false,
+            parentId: null,
+            order: 1,
+            header: { count: 'yes', pinned: 0, subs: false, stars: null, todos: true, add: 1, menu: false },
+          },
+        ],
+        memberships: {},
+        pins: {},
+        ungroupedCollapsed: false,
+      }))
+      const legacy = createFakeContext(legacyHome)
+      apply(legacy.ctx)
+      result = await call(legacy.state.routes[0], 'GET')
+      assert.equal(result.status, 200)
+      assert.deepEqual(result.json.state.boxes.find((box) => box.id === 'b_oldbox').header, {
+        count: true, pinned: true, subs: true, stars: true, todos: true, add: true, menu: true,
+      })
+      assert.deepEqual(result.json.state.boxes.find((box) => box.id === 'b_badbox').header, {
+        count: true, pinned: true, subs: false, stars: true, todos: true, add: true, menu: false,
+      })
+      legacy.dispose()
+    } finally {
+      await rm(legacyHome, { recursive: true, force: true })
     }
 
     // Corrupt file falls back to an empty state.

@@ -7,6 +7,8 @@
   "dialog.box.title": "箱子设置",
   "dialog.box.name": "名称",
   "dialog.box.color": "颜色",
+  "dialog.box.header": "标题栏显示",
+  "dialog.box.compact": "紧凑模式",
   "dialog.box.order": "顺序",
   "dialog.box.up": "上移",
   "dialog.box.down": "下移",
@@ -42,5 +44,14 @@
   "color.purple": "紫色",
   "color.pink": "粉色",
   "color.cyan": "青色",
-  "color.gray": "灰色"
+  "color.gray": "灰色",
+  "manager.headerDefault": "新建箱子默认标题栏",
+  "manager.applyAll": "应用到全部箱子",
+  "header.option.count": "会话数",
+  "header.option.pinned": "置顶数",
+  "header.option.subs": "子盒数",
+  "header.option.stars": "平均星级",
+  "header.option.todos": "待办完成度",
+  "header.option.add": "新建子盒",
+  "header.option.menu": "盒子菜单"
 }

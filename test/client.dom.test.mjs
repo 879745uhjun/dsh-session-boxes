@@ -174,6 +174,7 @@ async function installStore(page, { boxes = baseBoxes, memberships = {}, pins = 
       const snapshot = store.getSnapshot()
       store.set({ ...snapshot, ...next, revision: snapshot.revision + 1 })
     }
+    window.__bump = bump
     window.__engine = api.createDomEngine({
       store,
       getT: () => (key) => key,
@@ -1217,6 +1218,161 @@ async function autoExpandScenario() {
   }
 }
 
+async function headerConfigScenario() {
+  const { browser, page } = await openPage(html([
+    section('w1', 'Workplace', [
+      ['s1', 'Alpha'],
+      ['s2', 'Beta'],
+      ['s3', 'Gamma'],
+      ['s4', 'Delta'],
+    ], false),
+  ]))
+  try {
+    await installStore(page, {
+      boxes: [
+        { id: 'b_full', name: 'Full', color: 'blue', collapsed: false, parentId: null, order: 0 },
+        { id: 'b_sub', name: 'Sub', color: 'green', collapsed: false, parentId: 'b_full', order: 1 },
+        { id: 'b_compact', name: 'Compact', color: 'amber', collapsed: false, parentId: null, order: 2, header: { count: true, pinned: false, subs: false, stars: false, todos: false, add: false, menu: true } },
+        { id: 'b_off', name: 'Off', color: 'red', collapsed: false, parentId: null, order: 3, header: { count: false, pinned: false, subs: false, stars: false, todos: false, add: false, menu: false } },
+      ],
+      memberships: { s1: ['b_full'], s2: ['b_sub'], s3: ['b_compact'], s4: ['b_off'] },
+      pins: { b_full: ['s1'] },
+      stats: {
+        stars: { s1: 5, s2: 3, s3: 4, s4: 2 },
+        todos: { s1: true, s2: true, s3: true, s4: true },
+      },
+    })
+    const result = await page.evaluate(() => {
+      const section = document.querySelector('[data-section="w1"]')
+      const api = window.__DSH_SESSION_BOXES_TEST_API__
+      const header = (id) => section.querySelector(`[data-dsb-box="${id}"]`)
+      const role = (id, name) => header(id).querySelector(`[data-dsb-role="${name}"]`)
+      const nameWidth = (id) => header(id).querySelector('[data-dsb-role="name"]').getBoundingClientRect().width
+      const has = (id, name) => role(id, name) !== null
+      const invalid = api.normalizeState({
+        boxes: [{
+          id: 'b_invalid',
+          name: 'Invalid',
+          color: 'blue',
+          collapsed: false,
+          parentId: null,
+          order: 0,
+          header: { count: 'yes', pinned: 0, subs: false, stars: null, todos: true, add: 1, menu: false },
+        }],
+        memberships: {},
+        pins: {},
+      })
+      const old = api.normalizeState({
+        boxes: [{ id: 'b_old', name: 'Old', color: 'blue', collapsed: false, parentId: null, order: 0 }],
+        memberships: {},
+        pins: {},
+      })
+      const defaultBefore = api.readNewBoxHeader()
+      api.writeNewBoxHeader(api.compactHeader())
+      const defaultCompact = api.readNewBoxHeader()
+      api.writeNewBoxHeader(api.DEFAULT_HEADER)
+      return {
+        full: {
+          count: has('b_full', 'count'),
+          pinned: has('b_full', 'pin'),
+          subs: has('b_full', 'subs'),
+          stats: has('b_full', 'stats'),
+          add: has('b_full', 'add'),
+          menu: has('b_full', 'more'),
+          pinDisplay: role('b_full', 'pin').style.display,
+          subsDisplay: role('b_full', 'subs').style.display,
+        },
+        compact: {
+          count: has('b_compact', 'count'),
+          pinned: has('b_compact', 'pin'),
+          subs: has('b_compact', 'subs'),
+          stats: has('b_compact', 'stats'),
+          add: has('b_compact', 'add'),
+          menu: has('b_compact', 'more'),
+        },
+        off: {
+          count: has('b_off', 'count'),
+          pinned: has('b_off', 'pin'),
+          subs: has('b_off', 'subs'),
+          stats: has('b_off', 'stats'),
+          add: has('b_off', 'add'),
+          menu: has('b_off', 'more'),
+          chevron: has('b_off', 'toggle'),
+        },
+        fullNameWidth: nameWidth('b_full'),
+        compactNameWidth: nameWidth('b_compact'),
+        compactHeader: api.compactHeader(),
+        invalidHeader: invalid.boxes[0].header,
+        oldHeader: old.boxes[0].header,
+        defaultBefore,
+        defaultCompact,
+        effectiveOff: api.effectiveHeader({ count: false, pinned: false, subs: false, stars: false, todos: false, add: false, menu: false }),
+      }
+    })
+    assert.deepEqual(result.full, {
+      count: true,
+      pinned: true,
+      subs: true,
+      stats: true,
+      add: true,
+      menu: true,
+      pinDisplay: '',
+      subsDisplay: '',
+    })
+    assert.deepEqual(result.compact, { count: true, pinned: false, subs: false, stats: false, add: false, menu: true })
+    assert.deepEqual(result.off, { count: false, pinned: false, subs: false, stats: false, add: false, menu: true, chevron: true })
+    assert.ok(result.compactNameWidth > result.fullNameWidth, 'compact header leaves more room for the name')
+    assert.deepEqual(result.compactHeader, { count: true, pinned: false, subs: false, stars: false, todos: false, add: false, menu: true })
+    assert.deepEqual(result.invalidHeader, { count: true, pinned: true, subs: false, stars: true, todos: true, add: true, menu: false })
+    assert.deepEqual(result.oldHeader, { count: true, pinned: true, subs: true, stars: true, todos: true, add: true, menu: true })
+    assert.deepEqual(result.defaultBefore, { count: true, pinned: true, subs: true, stars: true, todos: true, add: true, menu: true })
+    assert.deepEqual(result.defaultCompact, { count: true, pinned: false, subs: false, stars: false, todos: false, add: false, menu: true })
+    assert.deepEqual(result.effectiveOff, { count: false, pinned: false, subs: false, stars: false, todos: false, add: false, menu: true })
+
+    // Collapsed and expanded headers use the same per-box configuration.
+    await page.evaluate(() => {
+      const boxes = window.__store.getSnapshot().boxes.map((box) => box.id === 'b_compact' ? { ...box, collapsed: true } : box)
+      window.__bump({ boxes })
+    })
+    await wait(page)
+    const collapsed = await page.evaluate(() => {
+      const header = document.querySelector('[data-section="w1"] [data-dsb-box="b_compact"]')
+      return {
+        count: header.querySelector('[data-dsb-role="count"]') !== null,
+        menu: header.querySelector('[data-dsb-role="more"]') !== null,
+        chevron: header.querySelector('[data-dsb-role="toggle"]') !== null,
+      }
+    })
+    assert.deepEqual(collapsed, { count: true, menu: true, chevron: true })
+
+    // Writing a config rebuilds the header without hidden placeholders.
+    await page.evaluate(() => {
+      const boxes = window.__store.getSnapshot().boxes.map((box) => box.id === 'b_full'
+        ? { ...box, header: { count: false, pinned: false, subs: false, stars: false, todos: false, add: false, menu: false } }
+        : box)
+      window.__bump({ boxes })
+    })
+    await wait(page)
+    const updated = await page.evaluate(() => {
+      const section = document.querySelector('[data-section="w1"]')
+      const header = section.querySelector('[data-dsb-box="b_full"]')
+      return {
+        count: header.querySelector('[data-dsb-role="count"]') !== null,
+        pin: header.querySelector('[data-dsb-role="pin"]') !== null,
+        subs: header.querySelector('[data-dsb-role="subs"]') !== null,
+        stats: header.querySelector('[data-dsb-role="stats"]') !== null,
+        add: header.querySelector('[data-dsb-role="add"]') !== null,
+        menu: header.querySelector('[data-dsb-role="more"]') !== null,
+        chevron: header.querySelector('[data-dsb-role="toggle"]') !== null,
+      }
+    })
+    assert.deepEqual(updated, { count: false, pin: false, subs: false, stats: false, add: false, menu: true, chevron: true })
+    console.log('client scenario 11 passed')
+  } finally {
+    await browser.close()
+  }
+}
+
 async function themePaletteScenario() {
   const { browser, page } = await openPage(html([
     section('w1', 'Workplace', [['s1', 'Alpha']], false),
@@ -1262,5 +1418,6 @@ await pinAndDragScenario()
 await subfolderScenario()
 await aggregateStatsScenario()
 await autoExpandScenario()
+await headerConfigScenario()
 await themePaletteScenario()
 console.log('all client DOM tests passed')
