@@ -51,5 +51,14 @@
         "@deepseek-ai/dsh-client-locale"
       ]
     }
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/879745uhjun/dsh-session-boxes.git"
+  },
+  "homepage": "https://github.com/879745uhjun/dsh-session-boxes#readme",
+  "bugs": {
+    "url": "https://github.com/879745uhjun/dsh-session-boxes/issues"
+  },
+  "author": "879745uhjun"
 }

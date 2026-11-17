@@ -70,6 +70,14 @@ node test/client.dom.test.mjs  # Chromium 里的分组引擎测试（Playwright�
 
 Host 测试覆盖持久化、一层树校验、删除父箱提升子箱、同级移动、箱内置顶、参数校验、JSON 接口、跨站拦截、Agent 工具和重挂载恢复。DOM 测试用桩 Module Loader 加载真实的 `client.js`，并用模拟侧栏（含 ui-workspace 的悬停卡片外层）验证分组、子箱嵌套、折叠、单位置、置顶、拖拽和清理。
 
+## 从 GitHub 安装
+
+```sh
+dsh plugin --profile desktop add github:879745uhjun/dsh-session-boxes
+```
+
+装好后刷新 Web 页面。
+
 ## 许可证
 
 MIT

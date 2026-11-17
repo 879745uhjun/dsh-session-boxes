@@ -70,6 +70,14 @@ node test/client.dom.test.mjs  # grouping engine in Chromium (Playwright)
 
 The Host test covers the durable store, one-level tree validation, promotion on delete, sibling moves, per-box pins, validation, the JSON route, the cross-origin fence, the agent tool, and persistence across remounts. The DOM test loads the real `client.js` with a stubbed Module Loader and a mock sidebar that mirrors the ui-workspace markup, including its hover-card wrapper.
 
+## Install from GitHub
+
+```sh
+dsh plugin --profile desktop add github:879745uhjun/dsh-session-boxes
+```
+
+Reload the Web UI page after installing.
+
 ## License
 
 MIT
