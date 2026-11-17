@@ -94,6 +94,14 @@ async function main() {
     assert.equal(first.state.tools.length, 1)
     const tool = first.state.tools[0]
     assert.equal(tool.name, 'session_boxes')
+    assert.equal(tool.parameters.type, 'object')
+    assert.equal(typeof tool.parameters.properties, 'object')
+    assert.ok(tool.parameters.properties.action, 'action property exists')
+    assert.deepEqual(tool.parameters.required, ['action'])
+    assert.equal(tool.parameters.action, undefined)
+    for (const [property, schema] of Object.entries(tool.parameters.properties)) {
+      assert.equal(schema.required, undefined, `${property} must not carry property-level required`)
+    }
 
     let result = await call(route, 'GET')
     assert.equal(result.status, 200)

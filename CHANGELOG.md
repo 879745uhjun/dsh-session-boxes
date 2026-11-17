@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.10
+
+- The `session_boxes` agent tool now registers its `parameters` as a JSON Schema
+  object root (`type` / `properties` / root-level `required: ['action']`) instead
+  of a bare property table. A bare table is forwarded verbatim to the model API,
+  where a property named after a schema keyword (`title`, `default`, `enum`, …)
+  fails the whole request with HTTP 400, and a property-level `required: true` is
+  rejected as well. The shape is pinned by assertions in `test/host.test.mjs`.
+
 ## 0.4.9
 
 - The session row menu now exposes one **Box settings** entry; “Move to session
