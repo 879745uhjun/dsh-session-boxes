@@ -45,13 +45,15 @@
   "color.pink": "Pink",
   "color.cyan": "Cyan",
   "color.gray": "Gray",
-  "manager.headerDefault": "Default header for new boxes",
-  "manager.applyAll": "Apply to all boxes",
   "header.option.count": "Count",
   "header.option.pinned": "Pinned",
   "header.option.subs": "Sub-boxes",
   "header.option.stars": "Stars",
   "header.option.todos": "Todos",
   "header.option.add": "Add sub-box",
-  "header.option.menu": "Menu"
+  "header.option.menu": "Menu",
+  "manager.globalHeader": "Global header",
+  "manager.followAll": "Make all follow global",
+  "dialog.box.followGlobal": "Use global header",
+  "dialog.box.globalHint": "This box follows the global header. Uncheck to configure it separately."
 }

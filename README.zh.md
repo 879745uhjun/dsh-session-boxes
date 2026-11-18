@@ -14,13 +14,13 @@
 - **单位置**：会话菜单里选择一个箱子或子箱子；“未分组”清空位置。选择新位置会替换旧位置。
 - **箱内置顶**：在箱子设置的成员列表里点右侧图钉，把会话固定到这个箱子的顶部；不影响原生全局置顶。置顶行排在最前，箱子标题显示图钉数量；置顶行本身用更深的底色、双层左侧色条和顶部强调线来区分，不再占用行尾空间显示图钉图标。会话的 `...` 菜单里有「取消在『箱子』箱内置顶」，取消后即可正常拖动排序。
 - **盒子汇总徽标**：每个箱子标题右侧显示 `★ 4.2`（成员平均星级）和 `☑ 3/7`（已完成/待办总数），数据来自已安装的 `dsh-session-stars` 和 `dsh-session-todos`。父箱子会包含子箱子成员。没有数据的段不显示；路由 404、1.5 秒超时或 JSON 异常时安静隐藏，标题保持原样。只做同源只读 GET，不 import 对端插件。
-- **盒头显示项可配置**：每个箱子可以单独选择 `count`、`pinned`、`subs`、`stars`、`todos`、`add`、`menu` 中哪些显示；折叠箭头始终保留。**紧凑模式**只留箭头 + 会话数 + 菜单。管理器里可以设置新建箱子的默认值，并一键应用到全部箱子。老数据缺少 `header` 时默认全部显示，无需迁移；非法值回落到默认。
+- **全局 + 单独盒头设置**：全局设置控制所有“跟随全局”的箱子；每个箱子可取消「跟随全局标题栏」，单独设置 `count`、`pinned`、`subs`、`stars`、`todos`、`add`、`menu`。折叠箭头始终保留；**紧凑模式**只留箭头 + 会话数 + 菜单。管理器里编辑全局设置，并可让全部箱子重新跟随全局。缺少 header/override 时默认跟随全局（默认全显示），无需迁移；非法值回落到默认。
 - **拖动排序**：把箱子标题拖到同级的另一个标题上即可自定义顺序；子箱子只在同级之间排序。管理器和箱子设置里也有 ↑/↓。
 - **拖动会话**：把会话行拖到箱子标题上即可移动过去；拖到“未分组”清空位置。
 - **管理器**：工作区标题栏（搜索、视图选项、添加工作区旁边）的箱子按钮打开整棵树的管理器：新建顶层箱子、用 `+` 新建子箱子、改名改色、排序、删除，以及打开单个箱子的设置。
 - **主题自适应与调色板**：盒子颜色改用成对的 `--dshc-*` 变量（`:root` 浅色、`body[data-ds-dark-theme]` 深色）；标题、圆点和拖放指示线统一用 `var(--dsb-color, var(--dshc-gray))`。深色下标题叠加比例提高（18%→24%、45%→52%），浅色保持 18%/45%。按钮、输入框和徽标继续使用 DSH 主题变量。
 - **持久化**：箱子、子箱子、归属和箱内置顶保存在 Host 的 `~/.dsh/session-boxes.json`。
-- **Agent 工具**：`session_boxes` 支持 list/create（可带 `parentId`）/rename/delete/move/assign/pin/unpin/collapse，并可读写每个箱子的 `header` 显示配置。
+- **Agent 工具**：`session_boxes` 支持 list/create（可带 `parentId`）/rename/delete/move/assign/pin/unpin/collapse，并可读写每个箱子的 `header`/`headerOverride`，以及用 `setGlobalHeader` 更新全局盒头。
 
 空白新会话，以及没有放进任何箱子的置顶会话，留在最上方；已经放进箱子的置顶会话会在该箱子内显示并排在最前，同时保留原生图钉标记。使用分组时，原生列表的“显示更多”会自动展开；你自己点“收起”后不会被强行展开。
 
@@ -53,9 +53,10 @@
 ```json
 {
   "version": 1,
+  "header": { "count": true, "pinned": true, "subs": true, "stars": true, "todos": true, "add": true, "menu": true },
   "boxes": [
     { "id": "b_ab12cd34ef", "name": "前端", "color": "blue", "collapsed": false, "parentId": null, "order": 0 },
-    { "id": "b_ff00aa11bb", "name": "组件", "color": "green", "collapsed": false, "parentId": "b_ab12cd34ef", "order": 1, "header": { "count": true, "pinned": true, "subs": true, "stars": false, "todos": false, "add": true, "menu": true } }
+    { "id": "b_ff00aa11bb", "name": "组件", "color": "green", "collapsed": false, "parentId": "b_ab12cd34ef", "order": 1, "header": { "count": true, "pinned": true, "subs": true, "stars": false, "todos": false, "add": true, "menu": true }, "headerOverride": true }
   ],
   "memberships": { "session-…": ["b_ff00aa11bb"] },
   "pins": { "b_ff00aa11bb": ["session-…"] },

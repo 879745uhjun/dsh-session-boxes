@@ -42,7 +42,6 @@ window.__ModuleLoader__.load({
       add: true,
       menu: true,
     })
-    const NEW_BOX_HEADER_KEY = 'dsh-session-boxes:new-box-header'
 
     function normalizeHeader(value, base = DEFAULT_HEADER, fallback = DEFAULT_HEADER) {
       const header = { ...base }
@@ -55,10 +54,18 @@ window.__ModuleLoader__.load({
       return header
     }
 
+    function isDefaultHeader(header) {
+      return HEADER_KEYS.every((key) => header[key] === DEFAULT_HEADER[key])
+    }
+
     function effectiveHeader(value) {
       const header = normalizeHeader(value)
       if (!HEADER_KEYS.some((key) => header[key])) header.menu = true
       return header
+    }
+
+    function resolvedHeader(box, state) {
+      return effectiveHeader(box.headerOverride === true ? box.header : state.header)
     }
 
     function compactHeader() {
@@ -70,31 +77,6 @@ window.__ModuleLoader__.load({
         todos: false,
         add: false,
         menu: true,
-      }
-    }
-
-    function loadNewBoxHeader() {
-      try {
-        const raw = window.localStorage.getItem(NEW_BOX_HEADER_KEY)
-        if (raw !== null) return normalizeHeader(JSON.parse(raw))
-      } catch {
-        /* private mode or malformed storage */
-      }
-      return { ...DEFAULT_HEADER }
-    }
-
-    let newBoxHeader = loadNewBoxHeader()
-
-    function readNewBoxHeader() {
-      return normalizeHeader(newBoxHeader)
-    }
-
-    function writeNewBoxHeader(value) {
-      newBoxHeader = normalizeHeader(value)
-      try {
-        window.localStorage.setItem(NEW_BOX_HEADER_KEY, JSON.stringify(newBoxHeader))
-      } catch {
-        /* private mode: keep the in-memory default */
       }
     }
 
@@ -114,6 +96,8 @@ window.__ModuleLoader__.load({
       'dialog.box.color': '颜色',
       'dialog.box.header': '标题栏显示',
       'dialog.box.compact': '紧凑模式',
+      'dialog.box.followGlobal': '跟随全局标题栏',
+      'dialog.box.globalHint': '当前使用全局标题栏设置；取消勾选可单独设置。',
       'dialog.box.order': '顺序',
       'dialog.box.up': '上移',
       'dialog.box.down': '下移',
@@ -141,8 +125,8 @@ window.__ModuleLoader__.load({
       'manager.settings': '设置',
       'manager.count': '{n} 个会话',
       'manager.create': '新建箱子',
-      'manager.headerDefault': '新建箱子默认标题栏',
-      'manager.applyAll': '应用到全部箱子',
+      'manager.globalHeader': '全局标题栏',
+      'manager.followAll': '全部跟随全局',
       'manager.newSub': '新建子箱子',
       'manager.childCount': '{n} 个子箱子',
       'dialog.close': '关闭',
@@ -195,6 +179,8 @@ window.__ModuleLoader__.load({
       'dialog.box.color': 'Color',
       'dialog.box.header': 'Header items',
       'dialog.box.compact': 'Compact mode',
+      'dialog.box.followGlobal': 'Use global header',
+      'dialog.box.globalHint': 'This box follows the global header. Uncheck to configure it separately.',
       'dialog.box.order': 'Order',
       'dialog.box.up': 'Move up',
       'dialog.box.down': 'Move down',
@@ -222,8 +208,8 @@ window.__ModuleLoader__.load({
       'manager.settings': 'Settings',
       'manager.count': '{n} sessions',
       'manager.create': 'New box',
-      'manager.headerDefault': 'Default header for new boxes',
-      'manager.applyAll': 'Apply to all boxes',
+      'manager.globalHeader': 'Global header',
+      'manager.followAll': 'Make all follow global',
       'manager.newSub': 'New sub-box',
       'manager.childCount': '{n} sub-boxes',
       'dialog.close': 'Close',
@@ -327,6 +313,7 @@ window.__ModuleLoader__.load({
         if (typeof entry.id !== 'string' || entry.id.length === 0 || seen.has(entry.id)) continue
         const name = typeof entry.name === 'string' && entry.name.trim().length > 0 ? entry.name.trim() : entry.id
         seen.add(entry.id)
+        const header = normalizeHeader(entry.header)
         boxes.push({
           id: entry.id,
           name,
@@ -334,7 +321,10 @@ window.__ModuleLoader__.load({
           collapsed: entry.collapsed === true,
           parentId: typeof entry.parentId === 'string' ? entry.parentId : null,
           order: Number.isFinite(Number(entry.order)) ? Number(entry.order) : boxes.length,
-          header: normalizeHeader(entry.header),
+          header,
+          headerOverride: typeof entry.headerOverride === 'boolean'
+            ? entry.headerOverride
+            : entry.header !== undefined && !isDefaultHeader(header),
         })
       }
       boxes.sort((left, right) => left.order - right.order)
@@ -371,7 +361,7 @@ window.__ModuleLoader__.load({
           if (kept.length > 0) pins[boxId] = kept
         }
       }
-      return { boxes: orderedBoxes, memberships, pins, ungroupedCollapsed: raw?.ungroupedCollapsed === true }
+      return { header: normalizeHeader(raw?.header), boxes: orderedBoxes, memberships, pins, ungroupedCollapsed: raw?.ungroupedCollapsed === true }
     }
 
     function errorMessage(error) {
@@ -404,6 +394,7 @@ window.__ModuleLoader__.load({
 
     const dataStore = createStore({
       status: 'loading',
+      header: { ...DEFAULT_HEADER },
       boxes: [],
       memberships: {},
       pins: {},
@@ -524,6 +515,7 @@ window.__ModuleLoader__.load({
       const current = dataStore.getSnapshot()
       dataStore.set({
         status: 'ready',
+        header: normalized.header,
         boxes: normalized.boxes,
         memberships: normalized.memberships,
         pins: normalized.pins,
@@ -664,19 +656,32 @@ window.__ModuleLoader__.load({
       return setBoxPin(boxId, sessionId, false)
     }
 
-    async function createBox(name, color = 'blue', parentId = null, header = readNewBoxHeader()) {
-      const result = await commit('create', { name, color, parentId, header }, null)
-      return result
+    async function createBox(name, color = 'blue', parentId = null, header) {
+      const payload = { name, color, parentId }
+      if (header !== undefined) {
+        payload.header = normalizeHeader(header)
+        payload.headerOverride = true
+      }
+      return commit('create', payload, null)
     }
 
     function updateBox(boxId, patch) {
       const boxes = resequenceTree(dataStore.getSnapshot().boxes.map((box) => {
         if (box.id !== boxId) return { ...box }
         const next = { ...box, ...patch }
-        if (patch.header !== undefined) next.header = normalizeHeader(patch.header, box.header, DEFAULT_HEADER)
+        if (patch.header !== undefined) {
+          next.header = normalizeHeader(patch.header, box.header, DEFAULT_HEADER)
+          if (patch.headerOverride === undefined) next.headerOverride = true
+        }
+        if (patch.headerOverride !== undefined) next.headerOverride = patch.headerOverride
         return next
       }))
       return commit('update', { boxId, ...patch }, (state) => ({ ...state, boxes }))
+    }
+
+    function updateGlobalHeader(header) {
+      const next = normalizeHeader(header, dataStore.getSnapshot().header, DEFAULT_HEADER)
+      return commit('setGlobalHeader', { header: next }, (state) => ({ ...state, header: next }))
     }
 
     function deleteBox(boxId) {
@@ -1271,7 +1276,7 @@ window.__ModuleLoader__.load({
       }
 
       function ensureBoxHeader(section, box, depth) {
-        const config = effectiveHeader(box.header)
+        const config = resolvedHeader(box, store.getSnapshot())
         const signature = HEADER_KEYS.map((key) => (config[key] ? '1' : '0')).join('')
         let header = headerFor(section, box.id)
         if (header !== null && header.dataset.dsbHeaderConfig === signature) return header
@@ -2120,6 +2125,7 @@ window.__ModuleLoader__.load({
         if (box === undefined) closeDialog()
       }, [box])
       if (box === undefined) return null
+      const followGlobal = box.headerOverride !== true
       const siblings = state.boxes
         .filter((entry) => entry.parentId === box.parentId)
         .sort((left, right) => left.order - right.order)
@@ -2193,13 +2199,31 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'dsb-field' },
           h('span', { className: 'dsb-field__label', children: t('dialog.box.header') }),
-          h(HeaderConfig, {
-            value: box.header,
-            t,
-            onChange: (next) => {
-              void updateBox(box.id, { header: next })
-            },
-          }),
+          h(
+            'label',
+            { className: 'dsb-header-follow' },
+            h('input', {
+              type: 'checkbox',
+              checked: followGlobal,
+              onChange: (event) => {
+                if (event.target.checked) {
+                  void updateBox(box.id, { headerOverride: false })
+                } else {
+                  void updateBox(box.id, { headerOverride: true, header: state.header })
+                }
+              },
+            }),
+            h('span', { children: t('dialog.box.followGlobal') }),
+          ),
+          followGlobal
+            ? h('p', { className: 'dsb-hint', children: t('dialog.box.globalHint') })
+            : h(HeaderConfig, {
+              value: box.header,
+              t,
+              onChange: (next) => {
+                void updateBox(box.id, { header: next, headerOverride: true })
+              },
+            }),
         ),
         h(
           'div',
@@ -2339,7 +2363,7 @@ window.__ModuleLoader__.load({
         const value = name.trim()
         if (value.length === 0 || busy) return
         setBusy(true)
-        const result = await createBox(value, color, parentId, readNewBoxHeader())
+        const result = await createBox(value, color, parentId)
         setBusy(false)
         if (result.ok) closeDialog()
       }
@@ -2419,17 +2443,11 @@ window.__ModuleLoader__.load({
       const [color, setColor] = useState('blue')
       const [busy, setBusy] = useState(false)
       const [confirmId, setConfirmId] = useState(null)
-      const [defaultHeader, setDefaultHeader] = useState(readNewBoxHeader())
-      const changeDefault = (next) => {
-        const normalized = normalizeHeader(next)
-        setDefaultHeader(normalized)
-        writeNewBoxHeader(normalized)
-      }
       const applyAll = async () => {
         if (busy) return
         setBusy(true)
         for (const box of state.boxes) {
-          await updateBox(box.id, { header: defaultHeader })
+          await updateBox(box.id, { headerOverride: false })
         }
         setBusy(false)
       }
@@ -2437,7 +2455,7 @@ window.__ModuleLoader__.load({
         const value = name.trim()
         if (value.length === 0 || busy) return
         setBusy(true)
-        const result = await createBox(value, color, null, defaultHeader)
+        const result = await createBox(value, color)
         setBusy(false)
         if (result.ok) setName('')
       }
@@ -2490,11 +2508,13 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'dsb-field' },
-          h('span', { className: 'dsb-field__label', children: t('manager.headerDefault') }),
+          h('span', { className: 'dsb-field__label', children: t('manager.globalHeader') }),
           h(HeaderConfig, {
-            value: defaultHeader,
+            value: state.header,
             t,
-            onChange: changeDefault,
+            onChange: (next) => {
+              void updateGlobalHeader(next)
+            },
             extra: h('button', {
               type: 'button',
               className: 'dsb-button',
@@ -2502,7 +2522,7 @@ window.__ModuleLoader__.load({
               onClick: () => {
                 void applyAll()
               },
-            }, t('manager.applyAll')),
+            }, t('manager.followAll')),
           }),
         ),
         state.boxes.length === 0
@@ -2732,6 +2752,8 @@ window.__ModuleLoader__.load({
       '.dsb-field--row{flex-direction:row;align-items:center;justify-content:space-between;gap:8px}',
       '.dsb-field__label{font-size:12px;color:var(--dsw-alias-label-secondary)}',
       '.dsb-header-config{display:flex;flex-direction:column;gap:8px;padding:8px;border:.5px solid var(--dsw-alias-border-l2, color-mix(in srgb, CanvasText 25%, transparent));border-radius:var(--dsw-radius-sm,6px);background:var(--dsw-alias-bg-layer-1, transparent)}',
+      '.dsb-header-follow{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary);cursor:pointer}',
+      '.dsb-header-follow input{flex:none;margin:0;accent-color:var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary, var(--dshc-blue)))}',
       '.dsb-header-config__grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 8px}',
       '.dsb-header-option{display:flex;align-items:center;gap:5px;min-width:0;font-size:12px;color:var(--dsw-alias-label-secondary);cursor:pointer}',
       '.dsb-header-option input{flex:none;margin:0;accent-color:var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary, var(--dshc-blue)))}',
@@ -2759,8 +2781,9 @@ window.__ModuleLoader__.load({
       normalizeHeader,
       effectiveHeader,
       compactHeader,
-      readNewBoxHeader,
-      writeNewBoxHeader,
+      isDefaultHeader,
+      resolvedHeader,
+      updateGlobalHeader,
       dataStore,
       statsStore,
       computeBoxStats,

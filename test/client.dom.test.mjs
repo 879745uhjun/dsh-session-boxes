@@ -140,16 +140,18 @@ const baseBoxes = [
   { id: 'b_study', name: '学习', color: 'green', collapsed: false, order: 1 },
 ]
 
-async function installStore(page, { boxes = baseBoxes, memberships = {}, pins = {}, pinned = [], blank = [], stats = { stars: {}, todos: {} } } = {}) {
-  await page.evaluate(({ boxes, memberships, pins, pinned, blank, stats }) => {
+async function installStore(page, { boxes = baseBoxes, memberships = {}, pins = {}, pinned = [], blank = [], stats = { stars: {}, todos: {} }, globalHeader } = {}) {
+  await page.evaluate(({ boxes, memberships, pins, pinned, blank, stats, globalHeader }) => {
     const api = window.__DSH_SESSION_BOXES_TEST_API__
     api.statsStore.set({
       stars: stats?.stars ?? {},
       todos: stats?.todos ?? {},
       revision: 1,
     })
+    const header = globalHeader ?? api.DEFAULT_HEADER
     const store = api.createStore({
       status: 'ready',
+      header,
       boxes,
       memberships,
       pins,
@@ -240,7 +242,7 @@ async function installStore(page, { boxes = baseBoxes, memberships = {}, pins = 
       autoExpand: false,
     })
     window.__engine.start()
-  }, { boxes, memberships, pins, pinned, blank, stats })
+  }, { boxes, memberships, pins, pinned, blank, stats, globalHeader })
   await wait(page)
 }
 
@@ -1232,8 +1234,8 @@ async function headerConfigScenario() {
       boxes: [
         { id: 'b_full', name: 'Full', color: 'blue', collapsed: false, parentId: null, order: 0 },
         { id: 'b_sub', name: 'Sub', color: 'green', collapsed: false, parentId: 'b_full', order: 1 },
-        { id: 'b_compact', name: 'Compact', color: 'amber', collapsed: false, parentId: null, order: 2, header: { count: true, pinned: false, subs: false, stars: false, todos: false, add: false, menu: true } },
-        { id: 'b_off', name: 'Off', color: 'red', collapsed: false, parentId: null, order: 3, header: { count: false, pinned: false, subs: false, stars: false, todos: false, add: false, menu: false } },
+        { id: 'b_compact', name: 'Compact', color: 'amber', collapsed: false, parentId: null, order: 2, header: { count: true, pinned: false, subs: false, stars: false, todos: false, add: false, menu: true }, headerOverride: true },
+        { id: 'b_off', name: 'Off', color: 'red', collapsed: false, parentId: null, order: 3, header: { count: false, pinned: false, subs: false, stars: false, todos: false, add: false, menu: false }, headerOverride: true },
       ],
       memberships: { s1: ['b_full'], s2: ['b_sub'], s3: ['b_compact'], s4: ['b_off'] },
       pins: { b_full: ['s1'] },
@@ -1267,10 +1269,6 @@ async function headerConfigScenario() {
         memberships: {},
         pins: {},
       })
-      const defaultBefore = api.readNewBoxHeader()
-      api.writeNewBoxHeader(api.compactHeader())
-      const defaultCompact = api.readNewBoxHeader()
-      api.writeNewBoxHeader(api.DEFAULT_HEADER)
       return {
         full: {
           count: has('b_full', 'count'),
@@ -1303,9 +1301,9 @@ async function headerConfigScenario() {
         compactNameWidth: nameWidth('b_compact'),
         compactHeader: api.compactHeader(),
         invalidHeader: invalid.boxes[0].header,
+        invalidOverride: invalid.boxes[0].headerOverride,
         oldHeader: old.boxes[0].header,
-        defaultBefore,
-        defaultCompact,
+        oldOverride: old.boxes[0].headerOverride,
         effectiveOff: api.effectiveHeader({ count: false, pinned: false, subs: false, stars: false, todos: false, add: false, menu: false }),
       }
     })
@@ -1324,10 +1322,50 @@ async function headerConfigScenario() {
     assert.ok(result.compactNameWidth > result.fullNameWidth, 'compact header leaves more room for the name')
     assert.deepEqual(result.compactHeader, { count: true, pinned: false, subs: false, stars: false, todos: false, add: false, menu: true })
     assert.deepEqual(result.invalidHeader, { count: true, pinned: true, subs: false, stars: true, todos: true, add: true, menu: false })
+    assert.equal(result.invalidOverride, true)
     assert.deepEqual(result.oldHeader, { count: true, pinned: true, subs: true, stars: true, todos: true, add: true, menu: true })
-    assert.deepEqual(result.defaultBefore, { count: true, pinned: true, subs: true, stars: true, todos: true, add: true, menu: true })
-    assert.deepEqual(result.defaultCompact, { count: true, pinned: false, subs: false, stars: false, todos: false, add: false, menu: true })
+    assert.equal(result.oldOverride, false)
     assert.deepEqual(result.effectiveOff, { count: false, pinned: false, subs: false, stars: false, todos: false, add: false, menu: true })
+
+    // Global header changes propagate to boxes without an override.
+    await page.evaluate(() => {
+      window.__bump({ header: window.__DSH_SESSION_BOXES_TEST_API__.compactHeader() })
+    })
+    await wait(page)
+    const globalCompact = await page.evaluate(() => {
+      const section = document.querySelector('[data-section="w1"]')
+      const has = (id, name) => section.querySelector(`[data-dsb-box="${id}"] [data-dsb-role="${name}"]`) !== null
+      return {
+        full: { count: has('b_full', 'count'), add: has('b_full', 'add'), stats: has('b_full', 'stats'), menu: has('b_full', 'more') },
+        compact: { count: has('b_compact', 'count'), add: has('b_compact', 'add'), stats: has('b_compact', 'stats'), menu: has('b_compact', 'more') },
+        off: { count: has('b_off', 'count'), menu: has('b_off', 'more') },
+      }
+    })
+    assert.deepEqual(globalCompact.full, { count: true, add: false, stats: false, menu: true })
+    assert.deepEqual(globalCompact.compact, { count: true, add: false, stats: false, menu: true })
+    assert.deepEqual(globalCompact.off, { count: false, menu: true })
+
+    // A per-box override ignores the global setting; following global restores it.
+    await page.evaluate(() => {
+      const compact = window.__DSH_SESSION_BOXES_TEST_API__.compactHeader()
+      const boxes = window.__store.getSnapshot().boxes.map((box) => {
+        if (box.id === 'b_full') return { ...box, header: compact, headerOverride: true }
+        if (box.id === 'b_compact') return { ...box, headerOverride: false }
+        return box
+      })
+      window.__bump({ header: window.__DSH_SESSION_BOXES_TEST_API__.DEFAULT_HEADER, boxes })
+    })
+    await wait(page)
+    const override = await page.evaluate(() => {
+      const section = document.querySelector('[data-section="w1"]')
+      const has = (id, name) => section.querySelector(`[data-dsb-box="${id}"] [data-dsb-role="${name}"]`) !== null
+      return {
+        full: { count: has('b_full', 'count'), add: has('b_full', 'add'), stats: has('b_full', 'stats'), menu: has('b_full', 'more') },
+        compact: { count: has('b_compact', 'count'), add: has('b_compact', 'add'), stats: has('b_compact', 'stats'), menu: has('b_compact', 'more') },
+      }
+    })
+    assert.deepEqual(override.full, { count: true, add: false, stats: false, menu: true })
+    assert.deepEqual(override.compact, { count: true, add: true, stats: true, menu: true })
 
     // Collapsed and expanded headers use the same per-box configuration.
     await page.evaluate(() => {

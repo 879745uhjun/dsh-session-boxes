@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0
+
+- Add a global header configuration (`header` at the state root) plus a per-box
+  `headerOverride`. Boxes without an override follow the global header; box
+  settings can uncheck “Use global header” to configure one box separately.
+- The manager edits the global header and has **Make all follow global**; new
+  boxes inherit the global header. Compact mode still means chevron + count +
+  menu.
+- Migration: a 0.6.0 box with a non-default header and no `headerOverride` is
+  treated as an override; default/missing headers join the global setting.
+- `session_boxes` returns the global header, exposes `headerOverride`, and adds
+  `setGlobalHeader`; schema/root-key assertions updated.
+- Host and DOM tests cover global inheritance, per-box override, migration,
+  persistence, and the existing default/compact/all-off behavior.
+
 ## 0.6.0
 
 - Per-box `header` config: count, pinned, subs, stars, todos, add, and menu can be

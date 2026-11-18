@@ -62,6 +62,10 @@ function readHeader(value, base = DEFAULT_HEADER, fallback = DEFAULT_HEADER) {
   return header
 }
 
+function isDefaultHeader(header) {
+  return HEADER_KEYS.every((key) => header[key] === DEFAULT_HEADER[key])
+}
+
 /** One warning sink that reports each distinct failure once. */
 function createLogger() {
   const seen = new Set()
@@ -76,7 +80,7 @@ function createLogger() {
 
 /** A fresh empty state. */
 function emptyState() {
-  return { boxes: [], memberships: {}, pins: {}, ungroupedCollapsed: false }
+  return { header: { ...DEFAULT_HEADER }, boxes: [], memberships: {}, pins: {}, ungroupedCollapsed: false }
 }
 
 /** Trim and validate a box name. */
@@ -111,6 +115,7 @@ function normalizeState(raw) {
     const name = readName(entry.name)
     if (!name.ok) continue
     seen.add(id)
+    const header = readHeader(entry.header)
     boxes.push({
       id,
       name: name.name,
@@ -118,7 +123,10 @@ function normalizeState(raw) {
       collapsed: entry.collapsed === true,
       parentId: typeof entry.parentId === 'string' ? entry.parentId : null,
       order: Number.isFinite(Number(entry.order)) ? Math.floor(Number(entry.order)) : boxes.length,
-      header: readHeader(entry.header),
+      header,
+      headerOverride: typeof entry.headerOverride === 'boolean'
+        ? entry.headerOverride
+        : entry.header !== undefined && !isDefaultHeader(header),
     })
   }
   const byId = new Map(boxes.map((box) => [box.id, box]))
@@ -163,6 +171,7 @@ function normalizeState(raw) {
   }
 
   return {
+    header: readHeader(raw?.header),
     boxes: orderedBoxes,
     memberships,
     pins,
@@ -177,6 +186,7 @@ function cloneState(state) {
   const pins = {}
   for (const [boxId, sessionIds] of Object.entries(state.pins ?? {})) pins[boxId] = [...sessionIds]
   return {
+    header: readHeader(state.header),
     boxes: state.boxes.map((box) => ({ ...box, header: readHeader(box.header) })),
     memberships,
     pins,
@@ -264,6 +274,7 @@ function applyMutation(current, action, payload) {
       parentId: parent.parentId,
       order: state.boxes.length,
       header: readHeader(body.header),
+      headerOverride: typeof body.headerOverride === 'boolean' ? body.headerOverride : body.header !== undefined,
     }
     state.boxes.push(box)
     state.boxes = resequenceTree(state.boxes)
@@ -290,6 +301,11 @@ function applyMutation(current, action, payload) {
     }
     if (body.header !== undefined) {
       box.header = readHeader(body.header, box.header, DEFAULT_HEADER)
+      if (body.headerOverride === undefined) box.headerOverride = true
+    }
+    if (body.headerOverride !== undefined) {
+      if (typeof body.headerOverride !== 'boolean') return { ok: false, error: 'headerOverride must be a boolean' }
+      box.headerOverride = body.headerOverride
     }
     if (body.parentId !== undefined) {
       const parent = readParentId(body.parentId, state)
@@ -440,6 +456,11 @@ function applyMutation(current, action, payload) {
     return { ok: true, state }
   }
 
+  if (action === 'setGlobalHeader') {
+    state.header = readHeader(body.header, state.header, DEFAULT_HEADER)
+    return { ok: true, state }
+  }
+
   if (action === 'setUngroupedCollapsed') {
     if (typeof body.collapsed !== 'boolean') return { ok: false, error: 'collapsed must be a boolean' }
     state.ungroupedCollapsed = body.collapsed
@@ -460,6 +481,7 @@ function boxRows(state) {
     parentId: box.parentId ?? null,
     depth: box.parentId === null || box.parentId === undefined ? 0 : 1,
     header: readHeader(box.header),
+    headerOverride: box.headerOverride === true,
     childCount: state.boxes.filter((child) => child.parentId === box.id).length,
     count: Object.values(state.memberships).filter((boxIds) => boxIds.includes(box.id)).length,
     pinnedCount: (state.pins[box.id] ?? []).length,
@@ -493,6 +515,7 @@ function createStore(file, log) {
     const body = JSON.stringify({
       version: FILE_VERSION,
       updatedAt: Date.now(),
+      header: state.header,
       boxes: state.boxes,
       memberships: state.memberships,
       pins: state.pins,
@@ -629,7 +652,7 @@ function createTool(store) {
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'create', 'rename', 'update', 'delete', 'move', 'assign', 'unassign', 'clear', 'pin', 'unpin', 'collapse'],
+          enum: ['list', 'create', 'rename', 'update', 'delete', 'move', 'assign', 'unassign', 'clear', 'pin', 'unpin', 'collapse', 'setGlobalHeader'],
           description: 'Operation to perform.',
         },
         boxId: { type: 'string', description: 'Target box id; required by rename, update, delete, move, unassign, pin, unpin, and collapse.' },
@@ -640,6 +663,7 @@ function createTool(store) {
         boxIds: { type: 'array', items: { type: 'string' }, description: 'Complete box id list for assign.' },
         toIndex: { type: 'number', description: 'Zero-based destination for move.' },
         collapsed: { type: 'boolean', description: 'Folded state for collapse.' },
+        headerOverride: { type: 'boolean', description: 'Whether this box overrides the global header instead of following it.' },
         header: {
           type: 'object',
           description: 'Optional per-box header visibility. Omitted keys keep their current value; a missing header means all items are shown.',
@@ -668,6 +692,7 @@ function createTool(store) {
         return {
           ok: true,
           action: 'list',
+          header: readHeader(state.header),
           boxes: boxRows(state),
           ungroupedCollapsed: state.ungroupedCollapsed,
           memberships: state.memberships,
@@ -693,7 +718,7 @@ function createTool(store) {
           : { ok: false, error: result.error }
       }
       if (action === 'create') {
-        const result = await store.mutate('create', { name: args?.name, color: args?.color, parentId: args?.parentId, header: args?.header })
+        const result = await store.mutate('create', { name: args?.name, color: args?.color, parentId: args?.parentId, header: args?.header, headerOverride: args?.headerOverride })
         return result.ok
           ? { ok: true, action, boxId: result.boxId, boxes: boxRows(result.state) }
           : { ok: false, error: result.error }
@@ -705,9 +730,15 @@ function createTool(store) {
           : { ok: false, error: result.error }
       }
       if (action === 'update') {
-        const result = await store.mutate('update', { boxId: args?.boxId, name: args?.name, color: args?.color, parentId: args?.parentId, header: args?.header })
+        const result = await store.mutate('update', { boxId: args?.boxId, name: args?.name, color: args?.color, parentId: args?.parentId, header: args?.header, headerOverride: args?.headerOverride })
         return result.ok
           ? { ok: true, action, boxes: boxRows(result.state) }
+          : { ok: false, error: result.error }
+      }
+      if (action === 'setGlobalHeader') {
+        const result = await store.mutate('setGlobalHeader', { header: args?.header })
+        return result.ok
+          ? { ok: true, action, header: readHeader(result.state.header), boxes: boxRows(result.state) }
           : { ok: false, error: result.error }
       }
       if (action === 'delete') {

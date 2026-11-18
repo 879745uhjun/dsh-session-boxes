@@ -98,7 +98,7 @@ async function main() {
     assert.equal(typeof tool.parameters.properties, 'object')
     assert.ok(tool.parameters.properties.action, 'action property exists')
     assert.deepEqual(Object.keys(tool.parameters.properties).sort(), [
-      'action', 'boxId', 'boxIds', 'collapsed', 'color', 'header', 'name', 'parentId', 'sessionId', 'toIndex',
+      'action', 'boxId', 'boxIds', 'collapsed', 'color', 'header', 'headerOverride', 'name', 'parentId', 'sessionId', 'toIndex',
     ])
     assert.equal(tool.parameters.properties.header.type, 'object')
     assert.deepEqual(Object.keys(tool.parameters.properties.header.properties).sort(), [
@@ -112,7 +112,13 @@ async function main() {
 
     let result = await call(route, 'GET')
     assert.equal(result.status, 200)
-    assert.deepEqual(result.json.state, { boxes: [], memberships: {}, pins: {}, ungroupedCollapsed: false })
+    assert.deepEqual(result.json.state, {
+      header: { count: true, pinned: true, subs: true, stars: true, todos: true, add: true, menu: true },
+      boxes: [],
+      memberships: {},
+      pins: {},
+      ungroupedCollapsed: false,
+    })
 
     result = await post(route, { action: 'create', name: '  前端  ', color: 'green' })
     assert.equal(result.status, 200)
@@ -123,17 +129,31 @@ async function main() {
     assert.equal(front.order, 0)
     assert.equal(front.collapsed, false)
     assert.deepEqual(front.header, { count: true, pinned: true, subs: true, stars: true, todos: true, add: true, menu: true })
+    assert.equal(front.headerOverride, false)
 
     result = await post(route, { action: 'update', boxId: front.id, header: { count: false, stars: false, menu: false } })
     assert.equal(result.status, 200)
     const headerBox = result.json.state.boxes.find((box) => box.id === front.id)
     assert.deepEqual(headerBox.header, { count: false, pinned: true, subs: true, stars: false, todos: true, add: true, menu: false })
+    assert.equal(headerBox.headerOverride, true)
 
     result = await post(route, { action: 'update', boxId: front.id, header: { count: 'no', pinned: 0, subs: false, stars: null, todos: true, add: 1, menu: false } })
     assert.equal(result.status, 200)
     assert.deepEqual(result.json.state.boxes.find((box) => box.id === front.id).header, {
       count: true, pinned: true, subs: false, stars: true, todos: true, add: true, menu: false,
     })
+    assert.equal(result.json.state.boxes.find((box) => box.id === front.id).headerOverride, true)
+
+    result = await post(route, { action: 'update', boxId: front.id, headerOverride: false })
+    assert.equal(result.status, 200)
+    assert.equal(result.json.state.boxes.find((box) => box.id === front.id).headerOverride, false)
+
+    result = await post(route, { action: 'setGlobalHeader', header: { count: false, menu: false } })
+    assert.equal(result.status, 200)
+    assert.deepEqual(result.json.state.header, { count: false, pinned: true, subs: true, stars: true, todos: true, add: true, menu: false })
+    result = await post(route, { action: 'setGlobalHeader', header: { count: 'no', pinned: false } })
+    assert.equal(result.status, 200)
+    assert.deepEqual(result.json.state.header, { count: true, pinned: false, subs: true, stars: true, todos: true, add: true, menu: false })
 
     result = await post(route, { action: 'create', name: '学习' })
     assert.equal(result.status, 200)
@@ -232,12 +252,17 @@ async function main() {
     assert.equal(toolResult.ok, true)
     const headerToolBox = toolResult.boxes.find((box) => box.name === '标题箱')
     assert.deepEqual(headerToolBox.header, { count: true, pinned: true, subs: true, stars: false, todos: false, add: true, menu: true })
+    assert.equal(headerToolBox.headerOverride, true)
 
     toolResult = await tool.execute({ action: 'update', boxId: headerToolBox.boxId, header: { count: false, menu: false } })
     assert.equal(toolResult.ok, true)
     assert.deepEqual(toolResult.boxes.find((box) => box.boxId === headerToolBox.boxId).header, {
       count: false, pinned: true, subs: true, stars: false, todos: false, add: true, menu: false,
     })
+
+    toolResult = await tool.execute({ action: 'setGlobalHeader', header: { todos: false } })
+    assert.equal(toolResult.ok, true)
+    assert.equal(toolResult.header.todos, false)
 
     toolResult = await tool.execute({ action: 'list' })
     assert.deepEqual(toolResult.boxes.find((box) => box.boxId === headerToolBox.boxId).header, {
@@ -285,6 +310,8 @@ async function main() {
     assert.deepEqual(stored.boxes.find((box) => box.id === front.id).header, {
       count: true, pinned: true, subs: false, stars: true, todos: true, add: true, menu: false,
     })
+    assert.equal(stored.boxes.find((box) => box.id === front.id).headerOverride, false)
+    assert.deepEqual(stored.header, { count: true, pinned: false, subs: true, stars: true, todos: false, add: true, menu: false })
     assert.deepEqual(stored.pins[front.id], ['session-aaa'])
     first.dispose()
 
@@ -360,6 +387,15 @@ async function main() {
             order: 1,
             header: { count: 'yes', pinned: 0, subs: false, stars: null, todos: true, add: 1, menu: false },
           },
+          {
+            id: 'b_custombox',
+            name: 'Custom',
+            color: 'amber',
+            collapsed: false,
+            parentId: null,
+            order: 2,
+            header: { stars: false },
+          },
         ],
         memberships: {},
         pins: {},
@@ -372,9 +408,13 @@ async function main() {
       assert.deepEqual(result.json.state.boxes.find((box) => box.id === 'b_oldbox').header, {
         count: true, pinned: true, subs: true, stars: true, todos: true, add: true, menu: true,
       })
+      assert.equal(result.json.state.boxes.find((box) => box.id === 'b_oldbox').headerOverride, false)
       assert.deepEqual(result.json.state.boxes.find((box) => box.id === 'b_badbox').header, {
         count: true, pinned: true, subs: false, stars: true, todos: true, add: true, menu: false,
       })
+      assert.equal(result.json.state.boxes.find((box) => box.id === 'b_badbox').headerOverride, true)
+      assert.equal(result.json.state.boxes.find((box) => box.id === 'b_custombox').headerOverride, true)
+      assert.equal(result.json.state.boxes.find((box) => box.id === 'b_custombox').header.stars, false)
       legacy.dispose()
     } finally {
       await rm(legacyHome, { recursive: true, force: true })
