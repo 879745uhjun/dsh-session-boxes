@@ -64,6 +64,17 @@ This package is a DSH bundle (`dsh.bundle.patch`). Install the directory with th
 }
 ```
 
+## Self-test
+
+Open **Settings → Plugins → dsh-session-boxes → Self-test** and press **Run self-test**. It only runs on demand (never on mount) and each check has a 2 s timeout:
+
+- GET `/session-boxes` returns 200 and `state.boxes` is an array;
+- `session_boxes` is registered (via the read-only `GET /session-boxes/health`);
+- the global `state.header` has all seven boolean keys;
+- optional `/session-stars` and `/session-todos` probes: unavailable peers are reported as skipped, not failed.
+
+The summary and **Copy results** Markdown stay in component memory; a failed check does not stop the others. No user data is written.
+
 ## Development
 
 ```sh

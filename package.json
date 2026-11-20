@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-boxes",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Custom-named session boxes (groups) inside the DeepSeek Harness workspace sidebar, with multi-box membership, collapse, colors, and drag or menu assignment.",
   "type": "module",
   "main": "index.js",
@@ -36,7 +36,8 @@
   "scripts": {
     "test": "node test/host.test.mjs && node test/client.dom.test.mjs",
     "test:dom": "node test/client.dom.test.mjs",
-    "test:host": "node test/host.test.mjs"
+    "test:host": "node test/host.test.mjs",
+    "pretest": "node --check index.js && node --check client.js"
   },
   "license": "MIT",
   "dsh": {

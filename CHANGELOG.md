@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0
+
+- Add a **Self-test** section to the plugin detail page (`plugins.detail.section`,
+  id `dsh-session-boxes.selftest`, order 90). It runs only on click, with a 2 s
+  timeout per check: `/session-boxes` shape, `session_boxes` registration via the
+  read-only `/session-boxes/health`, global header keys, and optional
+  `/session-stars` / `/session-todos` probes (unavailable = skipped).
+- Add the read-only `/session-boxes/health` route and a Markdown copy button.
+- Add `pretest` syntax checks for `index.js` / `client.js`; the self-test suite
+  covers registration metadata, a single 404 not affecting other checks, the
+  timeout path, and Markdown shape.
+
 ## 0.7.0
 
 - Add a global header configuration (`header` at the state root) plus a per-box

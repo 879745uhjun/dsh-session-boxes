@@ -739,6 +739,14 @@ async function applyScenario() {
       return {
         slots: registrations.map((entry) => entry.options.name),
         ids: registrations.map((entry) => entry.options.id),
+        selftest: (() => {
+          const entry = registrations.find((candidate) => candidate.options.name === 'plugins.detail.section')
+          return entry === undefined ? null : {
+            id: entry.options.id,
+            order: entry.options.order,
+            locale: entry.options.locale,
+          }
+        })(),
         hasZh: dictionaries['session-boxes']?.zh !== undefined,
         hasEn: dictionaries['session-boxes']?.en !== undefined,
         style: document.querySelector('style[data-plugin-css="dsh-session-boxes/client.css"]') !== null,
@@ -769,9 +777,11 @@ async function applyScenario() {
     assert.deepEqual(result.slots.sort(), [
       'contextMenu.icon',
       'contextMenu.icon',
+      'plugins.detail.section',
       'shell.overlay',
       'shell.overlay',
     ])
+    assert.deepEqual(result.selftest, { id: 'dsh-session-boxes.selftest', order: 90, locale: 'session-boxes' })
     assert.equal(result.hasZh, true)
     assert.equal(result.hasEn, true)
     assert.equal(result.style, true)
@@ -1411,6 +1421,90 @@ async function headerConfigScenario() {
   }
 }
 
+async function selfTestScenario() {
+  const { browser, page } = await openPage(html([
+    section('w1', 'Workplace', [['s1', 'Alpha']], false),
+  ]))
+  try {
+    const result = await page.evaluate(async () => {
+      const api = window.__DSH_SESSION_BOXES_TEST_API__
+      const t = (key) => key
+      const boxState = {
+        ok: true,
+        state: {
+          boxes: [],
+          header: { count: true, pinned: true, subs: true, stars: true, todos: true, add: true, menu: true },
+        },
+      }
+      const installFetch = (healthStatus) => {
+        window.fetch = async (url) => {
+          const path = String(url)
+          if (path.includes('/session-boxes/health')) {
+            return healthStatus === 200
+              ? { status: 200, ok: true, json: async () => ({ ok: true, tool: 'session_boxes', registered: true }) }
+              : { status: healthStatus, ok: false, json: async () => ({ ok: false }) }
+          }
+          if (path.includes('/session-boxes')) return { status: 200, ok: true, json: async () => boxState }
+          return { status: 200, ok: true, json: async () => ({ ok: true }) }
+        }
+      }
+
+      installFetch(200)
+      const success = await Promise.all(api.createSelfTestChecks(t, 200).map((check) => check.run()))
+
+      installFetch(404)
+      const degraded = await Promise.all(api.createSelfTestChecks(t, 200).map((check) => check.run()))
+
+      window.fetch = (url, init) => new Promise((resolve, reject) => {
+        const signal = init?.signal
+        if (signal !== undefined && signal !== null) {
+          signal.addEventListener('abort', () => reject(new Error('aborted')))
+        }
+      })
+      const timeout = await api.createSelfTestChecks(t, 30)[0].run()
+
+      const markdown = api.selfTestMarkdown([
+        { id: 'a', label: 'A', status: 'pass', detail: '' },
+        { id: 'b', label: 'B', status: 'fail', detail: 'bad' },
+        { id: 'c', label: 'C', status: 'skip', detail: 'optional' },
+      ], t)
+
+      return {
+        count: api.createSelfTestChecks(t, 200).length,
+        success: success.map((entry) => ({ ok: entry.ok === true, skip: entry.skip === true })),
+        degraded: degraded.map((entry) => ({ ok: entry.ok === true, skip: entry.skip === true })),
+        timeout,
+        markdown,
+        apiStillThere: typeof window.__DSH_SESSION_BOXES_TEST_API__ === 'object',
+        timeoutMs: api.SELFTEST_TIMEOUT_MS,
+      }
+    })
+    assert.equal(result.count, 4)
+    assert.deepEqual(result.success, [
+      { ok: true, skip: false },
+      { ok: true, skip: false },
+      { ok: true, skip: false },
+      { ok: true, skip: false },
+    ])
+    assert.deepEqual(result.degraded, [
+      { ok: true, skip: false },
+      { ok: false, skip: false },
+      { ok: true, skip: false },
+      { ok: true, skip: false },
+    ])
+    assert.equal(result.timeout.ok, false)
+    assert.equal(result.timeout.detail, 'selftest.timeout')
+    assert.match(result.markdown, /^- \[x\] A — selftest\.pass/m)
+    assert.match(result.markdown, /^- \[ \] B — selftest\.failselftest\.colonbad/m)
+    assert.match(result.markdown, /^- \[ \] C — selftest\.skipselftest\.colonoptional/m)
+    assert.equal(result.apiStillThere, true)
+    assert.equal(result.timeoutMs, 2000)
+    console.log('client scenario 12 passed')
+  } finally {
+    await browser.close()
+  }
+}
+
 async function themePaletteScenario() {
   const { browser, page } = await openPage(html([
     section('w1', 'Workplace', [['s1', 'Alpha']], false),
@@ -1457,5 +1551,6 @@ await subfolderScenario()
 await aggregateStatsScenario()
 await autoExpandScenario()
 await headerConfigScenario()
+await selfTestScenario()
 await themePaletteScenario()
 console.log('all client DOM tests passed')

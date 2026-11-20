@@ -146,6 +146,32 @@ window.__ModuleLoader__.load({
       'header.option.todos': '待办完成度',
       'header.option.add': '新建子盒',
       'header.option.menu': '盒子菜单',
+      'selftest.title': '自检',
+      'selftest.run': '运行自检',
+      'selftest.running': '运行中…',
+      'selftest.idle': '未运行',
+      'selftest.summary': '{pass} 通过 · {fail} 失败 · {skip} 跳过',
+      'selftest.pass': '通过',
+      'selftest.fail': '失败',
+      'selftest.skip': '跳过',
+      'selftest.copy': '复制结果',
+      'selftest.copied': '已复制',
+      'selftest.copyFailed': '复制失败',
+      'selftest.colon': '：',
+      'selftest.timeout': '超时',
+      'selftest.noAnswer': '无响应',
+      'selftest.http': 'HTTP {status}',
+      'selftest.route': 'GET /session-boxes',
+      'selftest.routeBad': 'state.boxes 不是数组',
+      'selftest.routeOk': '{count} 个箱子',
+      'selftest.tool': '工具 session_boxes',
+      'selftest.toolBad': '宿主报告工具未注册',
+      'selftest.header': '全局 header 七键',
+      'selftest.headerBad': 'state.header 缺少布尔键',
+      'selftest.headerOk': '七键可读',
+      'selftest.optional': '可选依赖 stars/todos',
+      'selftest.optionalOk': 'stars / todos 可用',
+      'selftest.optionalUnavailable': '可选依赖不可用：{list}',
       'header.stars': '成员平均星级 {stars}',
       'header.todos': '成员待办完成度 {done}/{total}',
       'header.subs': '{n} 个子箱子',
@@ -229,6 +255,32 @@ window.__ModuleLoader__.load({
       'header.option.todos': 'Todos',
       'header.option.add': 'Add sub-box',
       'header.option.menu': 'Menu',
+      'selftest.title': 'Self-test',
+      'selftest.run': 'Run self-test',
+      'selftest.running': 'Running…',
+      'selftest.idle': 'Not run yet',
+      'selftest.summary': '{pass} passed · {fail} failed · {skip} skipped',
+      'selftest.pass': 'Passed',
+      'selftest.fail': 'Failed',
+      'selftest.skip': 'Skipped',
+      'selftest.copy': 'Copy results',
+      'selftest.copied': 'Copied',
+      'selftest.copyFailed': 'Could not copy',
+      'selftest.colon': ': ',
+      'selftest.timeout': 'timed out',
+      'selftest.noAnswer': 'no answer',
+      'selftest.http': 'HTTP {status}',
+      'selftest.route': 'GET /session-boxes',
+      'selftest.routeBad': 'state.boxes is not an array',
+      'selftest.routeOk': '{count} boxes',
+      'selftest.tool': 'Tool session_boxes',
+      'selftest.toolBad': 'the host reports the tool is not registered',
+      'selftest.header': 'Global header (7 keys)',
+      'selftest.headerBad': 'state.header is missing boolean keys',
+      'selftest.headerOk': '7 keys readable',
+      'selftest.optional': 'Optional stars/todos',
+      'selftest.optionalOk': 'stars / todos available',
+      'selftest.optionalUnavailable': 'optional dependencies unavailable: {list}',
       'header.stars': 'Average member stars {stars}',
       'header.todos': 'Member todo completion {done}/{total}',
       'header.subs': '{n} sub-boxes',
@@ -2639,6 +2691,238 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
+     * Plugin detail self-test (plugins.detail.section)
+     * ------------------------------------------------------------------ */
+
+    const SELFTEST_PACKAGE = 'dsh-session-boxes'
+    const SELFTEST_TIMEOUT_MS = 2000
+    const SELFTEST_HEALTH = '/session-boxes/health'
+
+    async function selfTestProbe(path, timeoutMs) {
+      const controller = typeof AbortController === 'function' ? new AbortController() : null
+      const timer = controller === null ? null : window.setTimeout(() => {
+        try {
+          controller.abort()
+        } catch {
+          /* already aborted */
+        }
+      }, timeoutMs)
+      try {
+        const response = await fetch(path, {
+          signal: controller === null ? undefined : controller.signal,
+          headers: { accept: 'application/json' },
+          cache: 'no-store',
+        })
+        let json
+        try {
+          json = await response.json()
+        } catch {
+          json = undefined
+        }
+        return { reached: true, status: response.status, json, timedOut: false }
+      } catch {
+        return {
+          reached: false,
+          status: 0,
+          json: undefined,
+          timedOut: controller !== null && controller.signal.aborted,
+        }
+      } finally {
+        if (timer !== null) window.clearTimeout(timer)
+      }
+    }
+
+    function createSelfTestChecks(t, timeoutMs) {
+      const missed = (result) => (result.timedOut ? t('selftest.timeout') : t('selftest.noAnswer'))
+      return [
+        {
+          id: 'route',
+          label: t('selftest.route'),
+          run: async () => {
+            const result = await selfTestProbe(ENDPOINT, timeoutMs)
+            if (!result.reached) return { ok: false, detail: missed(result) }
+            if (result.status !== 200) return { ok: false, detail: t('selftest.http', { status: result.status }) }
+            if (!Array.isArray(result.json?.state?.boxes)) return { ok: false, detail: t('selftest.routeBad') }
+            return { ok: true, detail: t('selftest.routeOk', { count: result.json.state.boxes.length }) }
+          },
+        },
+        {
+          id: 'tool',
+          label: t('selftest.tool'),
+          run: async () => {
+            const result = await selfTestProbe(SELFTEST_HEALTH, timeoutMs)
+            if (!result.reached) return { ok: false, detail: missed(result) }
+            if (result.status !== 200) return { ok: false, detail: t('selftest.http', { status: result.status }) }
+            if (result.json?.registered !== true || result.json?.tool !== 'session_boxes') {
+              return { ok: false, detail: t('selftest.toolBad') }
+            }
+            return { ok: true, detail: 'session_boxes' }
+          },
+        },
+        {
+          id: 'header',
+          label: t('selftest.header'),
+          run: async () => {
+            const result = await selfTestProbe(ENDPOINT, timeoutMs)
+            if (!result.reached) return { ok: false, detail: missed(result) }
+            if (result.status !== 200) return { ok: false, detail: t('selftest.http', { status: result.status }) }
+            const header = result.json?.state?.header
+            const complete = header !== null && typeof header === 'object' && !Array.isArray(header)
+              && HEADER_KEYS.every((key) => typeof header[key] === 'boolean')
+            if (!complete) return { ok: false, detail: t('selftest.headerBad') }
+            return { ok: true, detail: t('selftest.headerOk') }
+          },
+        },
+        {
+          id: 'optional',
+          label: t('selftest.optional'),
+          run: async () => {
+            const [stars, todos] = await Promise.all([
+              selfTestProbe('/session-stars', timeoutMs),
+              selfTestProbe('/session-todos', timeoutMs),
+            ])
+            const unavailable = []
+            if (stars.status !== 200) unavailable.push('stars')
+            if (todos.status !== 200) unavailable.push('todos')
+            if (unavailable.length > 0) {
+              return { skip: true, detail: t('selftest.optionalUnavailable', { list: unavailable.join(', ') }) }
+            }
+            return { ok: true, detail: t('selftest.optionalOk') }
+          },
+        },
+      ]
+    }
+
+    function selfTestStatusText(status, t) {
+      return status === 'pass' ? t('selftest.pass')
+        : status === 'fail' ? t('selftest.fail')
+          : status === 'skip' ? t('selftest.skip')
+            : status === 'run' ? t('selftest.running') : t('selftest.idle')
+    }
+
+    function selfTestMarkdown(rows, t) {
+      return rows.map((row) => (row.status === 'pass'
+        ? `- [x] ${row.label} — ${t('selftest.pass')}`
+        : `- [ ] ${row.label} — ${selfTestStatusText(row.status, t)}${row.detail === '' ? '' : t('selftest.colon') + row.detail}`)).join('\n')
+    }
+
+    function SelfTestSection({ ctx, subject, t: suppliedT }) {
+      const locale = ctx?.locale ?? null
+      const t = typeof suppliedT === 'function'
+        ? suppliedT
+        : (locale !== null && typeof locale.bind === 'function' ? locale.bind(NS) : (key) => key)
+      const [rows, setRows] = useState([])
+      const [running, setRunning] = useState(false)
+      const [note, setNote] = useState('')
+      const checks = createSelfTestChecks(t, SELFTEST_TIMEOUT_MS)
+      const pkg = subject !== null && typeof subject === 'object' ? subject.pkg : undefined
+      if (pkg === undefined || pkg === null || typeof pkg !== 'object' || pkg.name !== SELFTEST_PACKAGE) return null
+
+      const counts = rows.reduce((acc, row) => {
+        if (row.status === 'pass') acc.pass += 1
+        else if (row.status === 'skip') acc.skip += 1
+        else if (row.status === 'fail') acc.fail += 1
+        return acc
+      }, { pass: 0, fail: 0, skip: 0 })
+      const summary = rows.length === 0
+        ? t('selftest.idle')
+        : t('selftest.summary', { pass: counts.pass, fail: counts.fail, skip: counts.skip })
+
+      const pending = () => checks.map((check) => ({
+        id: check.id,
+        label: check.label,
+        status: 'run',
+        detail: '',
+      }))
+
+      const run = async () => {
+        if (running) return
+        setRunning(true)
+        setNote('')
+        setRows(pending())
+        const settled = []
+        for (const check of checks) {
+          let outcome
+          try {
+            outcome = await check.run()
+          } catch (error) {
+            outcome = { ok: false, detail: String(error?.message ?? error) }
+          }
+          settled.push({
+            id: check.id,
+            label: check.label,
+            status: outcome.skip === true ? 'skip' : outcome.ok === true ? 'pass' : 'fail',
+            detail: typeof outcome.detail === 'string' ? outcome.detail : '',
+          })
+          setRows(settled.concat(checks.slice(settled.length).map((rest) => ({
+            id: rest.id,
+            label: rest.label,
+            status: 'run',
+            detail: '',
+          }))))
+        }
+        setRows(settled)
+        setRunning(false)
+      }
+
+      const copy = async () => {
+        const text = rows.length === 0 ? t('selftest.idle') : selfTestMarkdown(rows, t)
+        try {
+          if (typeof navigator === 'undefined' || navigator.clipboard === undefined) throw new Error('no clipboard')
+          await navigator.clipboard.writeText(text)
+          setNote(t('selftest.copied'))
+        } catch {
+          setNote(t('selftest.copyFailed'))
+        }
+      }
+
+      return h(
+        'div',
+        { className: 'dsb-st', 'data-selftest': SELFTEST_PACKAGE },
+        h(
+          'div',
+          { className: 'dsb-st__head' },
+          h('h3', { className: 'dsb-st__title' }, t('selftest.title')),
+          h('button', {
+            type: 'button',
+            className: 'dsb-st__btn dsb-st__btn--primary',
+            'data-selftest-action': 'run',
+            disabled: running,
+            onClick: () => {
+              void run()
+            },
+          }, running ? t('selftest.running') : t('selftest.run')),
+          h('span', { className: 'dsb-st__summary', 'data-selftest-summary': summary }, summary),
+          h('button', {
+            type: 'button',
+            className: 'dsb-st__btn',
+            'data-selftest-action': 'copy',
+            disabled: rows.length === 0,
+            onClick: () => {
+              void copy()
+            },
+          }, t('selftest.copy')),
+        ),
+        note === '' ? null : h('p', { className: 'dsb-st__note', 'data-selftest-note': note }, note),
+        h(
+          'div',
+          { className: 'dsb-st__list' },
+          rows.map((row) => h(
+            'div',
+            { key: row.id, className: 'dsb-st__row', 'data-check': row.id, 'data-status': row.status },
+            h(
+              'div',
+              { className: 'dsb-st__label' },
+              h('div', null, row.label),
+              row.detail === '' || row.status === 'run' ? null : h('div', { className: 'dsb-st__detail' }, row.detail),
+            ),
+            h('span', { className: 'dsb-st__badge', 'data-status': row.status }, selfTestStatusText(row.status, t)),
+          )),
+        ),
+      )
+    }
+
+    /* ------------------------------------------------------------------ *
      * Styles
      * ------------------------------------------------------------------ */
 
@@ -2759,6 +3043,26 @@ window.__ModuleLoader__.load({
       '.dsb-header-option input{flex:none;margin:0;accent-color:var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary, var(--dshc-blue)))}',
       '.dsb-header-option span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.dsb-header-config__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+      '.dsb-st{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding-top:12px;border-top:.5px solid var(--dsw-alias-border-l2, color-mix(in srgb, CanvasText 25%, transparent))}',
+      '.dsb-st__head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}',
+      '.dsb-st__title{margin:0 auto 0 0;font-size:14px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary)}',
+      '.dsb-st__btn{appearance:none;box-sizing:border-box;font:inherit;font-size:12px;line-height:18px;height:28px;padding:0 12px;border-radius:8px;border:.5px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}',
+      '.dsb-st__btn:hover{background:var(--dsw-alias-bg-layer-2)}',
+      '.dsb-st__btn--primary{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-brand-primary)}',
+      '.dsb-st__btn:disabled{opacity:.55;cursor:default}',
+      '.dsb-st__btn:disabled:hover{background:transparent}',
+      '.dsb-st__btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
+      '.dsb-st__summary{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}',
+      '.dsb-st__note{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}',
+      '.dsb-st__list{display:flex;flex-direction:column;gap:2px}',
+      '.dsb-st__row{display:flex;align-items:flex-start;gap:10px;padding:7px 10px;border-radius:8px;background:var(--dsw-alias-bg-layer-1)}',
+      '.dsb-st__label{flex:1;min-width:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary)}',
+      '.dsb-st__detail{margin-top:2px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary)}',
+      '.dsb-st__badge{flex:none;font-size:11px;line-height:16px;padding:2px 8px;border-radius:999px;border:.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary)}',
+      '.dsb-st__badge[data-status=pass]{color:var(--dsw-alias-state-success-primary);border-color:var(--dsw-alias-state-success-primary)}',
+      '.dsb-st__badge[data-status=fail]{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}',
+      '.dsb-st__badge[data-status=run]{color:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary)}',
+      '.dsb-st__badge[data-status=skip]{color:var(--dsw-alias-state-warn-primary);border-color:var(--dsw-alias-state-warn-primary)}',
       '.dsb-swatches{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
       '.dsb-swatch{width:18px;height:18px;padding:0;border:0;border-radius:50%;cursor:pointer;box-shadow:inset 0 0 0 1px color-mix(in srgb, Canvas 18%, transparent)}',
       '.dsb-swatch.is-on{box-shadow:0 0 0 2px var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1, Canvas)),0 0 0 3.5px var(--dsw-alias-label-primary, CanvasText)}',
@@ -2784,6 +3088,10 @@ window.__ModuleLoader__.load({
       isDefaultHeader,
       resolvedHeader,
       updateGlobalHeader,
+      createSelfTestChecks,
+      selfTestMarkdown,
+      selfTestStatusText,
+      SELFTEST_TIMEOUT_MS,
       dataStore,
       statsStore,
       computeBoxStats,
@@ -2969,6 +3277,13 @@ window.__ModuleLoader__.load({
           name: 'contextMenu.icon',
           key: 'session-boxes.pin',
         }, PinGlyph))
+
+        ctx.slots.inject('plugins.detail.section', () => ctx.slots.register({
+          name: 'plugins.detail.section',
+          id: 'dsh-session-boxes.selftest',
+          order: 90,
+          locale: NS,
+        }, SelfTestSection))
 
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay',

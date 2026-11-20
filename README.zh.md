@@ -64,6 +64,17 @@
 }
 ```
 
+## 自检
+
+打开 **设置 → 插件 → dsh-session-boxes → 自检**，点「运行自检」。只在点击时运行（挂载时不会自动发请求），每项超时 2 秒：
+
+- GET `/session-boxes` 返回 200 且 `state.boxes` 是数组；
+- `session_boxes` 工具已注册（通过只读 `GET /session-boxes/health`）；
+- 全局 `state.header` 的七个布尔键都可读；
+- 可选依赖 `/session-stars`、`/session-todos` 探测：不可用时记为「跳过」，不算失败。
+
+汇总和「复制结果」的 Markdown 只保存在组件内存；单项失败不影响其它项。不写入任何用户数据。
+
 ## 开发
 
 ```sh

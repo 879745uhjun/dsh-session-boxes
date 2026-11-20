@@ -91,6 +91,15 @@ async function main() {
     assert.ok(route, 'route registered')
     assert.equal(route.kind, 'exact')
     assert.equal(route.path, '/session-boxes')
+    assert.equal(first.state.routes.length, 2)
+    const healthRoute = first.state.routes[1]
+    assert.equal(healthRoute.kind, 'exact')
+    assert.equal(healthRoute.path, '/session-boxes/health')
+    let health = await call(healthRoute, 'GET')
+    assert.equal(health.status, 200)
+    assert.deepEqual(health.json, { ok: true, tool: 'session_boxes', registered: true })
+    health = await call(healthRoute, 'POST', '{}')
+    assert.equal(health.status, 405)
     assert.equal(first.state.tools.length, 1)
     const tool = first.state.tools[0]
     assert.equal(tool.name, 'session_boxes')

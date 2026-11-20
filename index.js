@@ -23,6 +23,8 @@ export const inject = ['tools']
 
 /** Same-origin route the browser half talks to. */
 const ROUTE = '/session-boxes'
+/** Read-only health probe used by the plugin detail self-test. */
+const HEALTH_ROUTE = '/session-boxes/health'
 /** File format version. */
 const FILE_VERSION = 1
 /** Request-body ceiling for the browser route. */
@@ -642,6 +644,26 @@ function createRouteHandler(store, log) {
   }
 }
 
+/** Read-only health probe: which tool this plugin registered, and whether it did. */
+function createHealthHandler(isToolRegistered) {
+  return function handleSessionBoxesHealth(request, response) {
+    if (!isAcceptableOrigin(request)) {
+      sendJson(response, 403, { ok: false, error: 'cross-origin request refused' })
+      return
+    }
+    if (request.method !== 'GET') {
+      response.writeHead(405, { allow: 'GET', 'content-type': 'application/json; charset=utf-8' })
+      response.end(JSON.stringify({ ok: false, error: 'method not allowed' }))
+      return
+    }
+    sendJson(response, 200, {
+      ok: true,
+      tool: 'session_boxes',
+      registered: isToolRegistered() === true,
+    })
+  }
+}
+
 /** The `session_boxes` agent tool over the same store. */
 function createTool(store) {
   return {
@@ -785,13 +807,29 @@ export function apply(ctx) {
     : join(homedir(), '.dsh', 'session-boxes.json')
   const log = createLogger()
   const store = createStore(file, log)
+  let toolRegistered = false
 
-  ctx.effect(() => ctx.tools.register(createTool(store)), 'session-boxes: agent tool')
+  ctx.effect(() => {
+    const dispose = ctx.tools.register(createTool(store))
+    toolRegistered = true
+    return () => {
+      toolRegistered = false
+      if (typeof dispose === 'function') dispose()
+    }
+  }, 'session-boxes: agent tool')
 
   ctx.inject(['webServer'], (scope) => {
     scope.effect(
       () => scope.webServer.register({ kind: 'exact', path: ROUTE, handler: createRouteHandler(store, log) }),
       'session-boxes: browser route',
+    )
+    scope.effect(
+      () => scope.webServer.register({
+        kind: 'exact',
+        path: HEALTH_ROUTE,
+        handler: createHealthHandler(() => toolRegistered),
+      }),
+      'session-boxes: health route',
     )
   })
 }
