@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1
+
+- Accept both `plugins.detail.section` subject shapes: a bundle (`pkg.name`) and
+  an item (`id` equal to `dsh-session-boxes` or `include:dsh-session-boxes`).
+  Other plugin items still render the section as null.
+
 ## 0.8.0
 
 - Add a **Self-test** section to the plugin detail page (`plugins.detail.section`,

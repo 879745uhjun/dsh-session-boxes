@@ -2698,6 +2698,16 @@ window.__ModuleLoader__.load({
     const SELFTEST_TIMEOUT_MS = 2000
     const SELFTEST_HEALTH = '/session-boxes/health'
 
+    function subjectPluginName(subject) {
+      if (subject?.kind === 'bundle') return subject?.pkg?.name
+      if (subject?.kind === 'item' && typeof subject?.id === 'string') {
+        return subject.id === SELFTEST_PACKAGE || subject.id === `include:${SELFTEST_PACKAGE}`
+          ? SELFTEST_PACKAGE
+          : undefined
+      }
+      return undefined
+    }
+
     async function selfTestProbe(path, timeoutMs) {
       const controller = typeof AbortController === 'function' ? new AbortController() : null
       const timer = controller === null ? null : window.setTimeout(() => {
@@ -2815,8 +2825,7 @@ window.__ModuleLoader__.load({
       const [running, setRunning] = useState(false)
       const [note, setNote] = useState('')
       const checks = createSelfTestChecks(t, SELFTEST_TIMEOUT_MS)
-      const pkg = subject !== null && typeof subject === 'object' ? subject.pkg : undefined
-      if (pkg === undefined || pkg === null || typeof pkg !== 'object' || pkg.name !== SELFTEST_PACKAGE) return null
+      if (subjectPluginName(subject) !== SELFTEST_PACKAGE) return null
 
       const counts = rows.reduce((acc, row) => {
         if (row.status === 'pass') acc.pass += 1
@@ -3091,6 +3100,7 @@ window.__ModuleLoader__.load({
       createSelfTestChecks,
       selfTestMarkdown,
       selfTestStatusText,
+      subjectPluginName,
       SELFTEST_TIMEOUT_MS,
       dataStore,
       statsStore,

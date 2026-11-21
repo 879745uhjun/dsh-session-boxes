@@ -1475,6 +1475,10 @@ async function selfTestScenario() {
         degraded: degraded.map((entry) => ({ ok: entry.ok === true, skip: entry.skip === true })),
         timeout,
         markdown,
+        includeBoxes: api.subjectPluginName({ kind: 'item', id: 'include:dsh-session-boxes' }),
+        includeTodos: api.subjectPluginName({ kind: 'item', id: 'include:dsh-session-todos' }),
+        bundleBoxes: api.subjectPluginName({ kind: 'bundle', pkg: { name: 'dsh-session-boxes' } }),
+        otherItem: api.subjectPluginName({ kind: 'item', id: 'dsh-session-quickbar' }),
         apiStillThere: typeof window.__DSH_SESSION_BOXES_TEST_API__ === 'object',
         timeoutMs: api.SELFTEST_TIMEOUT_MS,
       }
@@ -1497,6 +1501,10 @@ async function selfTestScenario() {
     assert.match(result.markdown, /^- \[x\] A — selftest\.pass/m)
     assert.match(result.markdown, /^- \[ \] B — selftest\.failselftest\.colonbad/m)
     assert.match(result.markdown, /^- \[ \] C — selftest\.skipselftest\.colonoptional/m)
+    assert.equal(result.includeBoxes, 'dsh-session-boxes')
+    assert.equal(result.includeTodos, undefined)
+    assert.equal(result.bundleBoxes, 'dsh-session-boxes')
+    assert.equal(result.otherItem, undefined)
     assert.equal(result.apiStillThere, true)
     assert.equal(result.timeoutMs, 2000)
     console.log('client scenario 12 passed')
